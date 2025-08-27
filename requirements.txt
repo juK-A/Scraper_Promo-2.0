@@ -1,0 +1,9 @@
+# /mercado_livre_scraper/requirements.txt
+
+Flask
+requests
+beautifulsoup4
+supabase
+pytz
+Pillow
+python-dotenv

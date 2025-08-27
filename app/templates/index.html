@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mercado Livre Scraper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🛒 Mercado Livre Scraper</h1>
+        <p>Encontre os melhores produtos e preços do Mercado Livre</p>
+      </div>
+
+      <div class="search-section">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="showTab('busca', this)">
+            🔍 Buscar Produtos
+          </button>
+          <button class="tab-btn" onclick="showTab('link', this)">
+            🔗 Analisar Link
+          </button>
+          <button class="tab-btn" onclick="showTab('webhook', this)">
+            📢 Enviar Webhook
+          </button>
+          <button class="tab-btn" onclick="showTab('agendamento', this)">
+            📅 Agendamento
+          </button>
+        </div>
+
+        <div id="tab-busca" class="tab-content active">
+          <form class="search-form" id="searchForm">
+            <div class="form-group">
+              <label for="produto">Produto</label>
+              <input
+                type="text"
+                id="produto"
+                name="produto"
+                placeholder="Ex: smartphone samsung"
+                required
+              />
+            </div>
+            <div class="form-group" style="flex: 0 0 150px">
+              <label for="maxPages">Páginas</label>
+              <select id="maxPages" name="maxPages">
+                <option value="1">1 página</option>
+                <option value="2">2 páginas</option>
+                <option value="3" selected>3 páginas</option>
+                <option value="5">5 páginas</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 0 0 auto">
+              <button type="submit" class="btn" id="searchBtn">
+                Buscar Produtos
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div id="tab-link" class="tab-content">
+          <form class="search-form" id="linkForm">
+            <div class="form-group">
+              <label for="produtoUrl">Link do Produto (Mercado Livre)</label>
+              <input
+                type="url"
+                id="produtoUrl"
+                name="produtoUrl"
+                placeholder="https://produto.mercadolivre.com.br/..."
+                required
+              />
+            </div>
+            <div class="form-group" style="flex: 0 0 auto">
+              <button type="submit" class="btn" id="linkBtn">
+                Analisar Produto
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div id="tab-webhook" class="tab-content">
+          <form class="search-form" id="webhookForm">
+            <div class="form-group">
+              <label for="webhookUrls"
+                >Links (Formato: link_produto,link_afiliado)</label
+              >
+              <textarea
+                id="webhookUrls"
+                name="webhookUrls"
+                placeholder="Cole a lista de links aqui, um par por linha.&#10;Ex: https://produto.mercadolivre...,https://link.afiliado..."
+                rows="10"
+                style="
+                  width: 100%;
+                  padding: 10px;
+                  font-size: 14px;
+                  border-radius: 10px;
+                  border: 2px solid #e1e8ed;
+                "
+                required
+              ></textarea>
+            </div>
+            <div
+              class="form-group"
+              style="
+                flex: 0 0 auto;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+              "
+            >
+              <button type="submit" class="btn" id="webhookBtn">
+                Enviar para Webhook
+              </button>
+              <button
+                type="button"
+                class="btn-excluir"
+                id="clearWebhookTextareaBtn"
+              >
+                Limpar Lista
+              </button>
+            </div>
+          </form>
+        </div>
+        <div id="tab-agendamento" class="tab-content">
+          <div class="search-section">
+            <form class="search-form" id="filtroAgendamentoForm">
+              <div class="form-group">
+                <label for="filtroStatus">Status</label>
+                <select id="filtroStatus" name="status">
+                  <option value="agendado">Agendado</option>
+                  <option value="nao-agendado">Não Agendado</option>
+                  <option value="todos">Todos</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="filtroOrdem">Ordenar por</label>
+                <select id="filtroOrdem" name="ordem">
+                  <option value="desc">Mais Recentes</option>
+                  <option value="asc">Mais Antigos</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 0 0 auto">
+                <button type="submit" class="btn" id="aplicarFiltroBtn">
+                  Aplicar Filtro
+                </button>
+              </div>
+            </form>
+            <div id="agendamento-list-container">
+              <h3>Produtos na Base de Dados:</h3>
+              <div id="agendamento-list" class="products-grid">
+                <p>Carregando produtos...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <p>Processando...</p>
+        </div>
+      </div>
+
+      <div class="results-section" id="resultsSection">
+        <div class="results-header">
+          <div class="results-count" id="resultsCount"></div>
+          <button class="clear-btn" id="clearBtn">Limpar Resultados</button>
+        </div>
+        <div class="products-grid" id="productsGrid"></div>
+      </div>
+
+      <div class="results-section" id="produtoSection" style="display: none">
+        <div class="results-header">
+          <div class="results-count">Produto Analisado</div>
+          <button class="clear-btn" id="clearProdutoBtn">Limpar</button>
+        </div>
+        <div id="produtoDetalhado"></div>
+      </div>
+
+      <div
+        class="results-section"
+        id="webhookMessageSection"
+        style="display: none"
+      >
+        <div class="results-header">
+          <div class="results-count">Resposta do Webhook</div>
+          <button class="clear-btn" id="clearWebhookBtn">Limpar</button>
+        </div>
+        <div id="webhookMessageContent"></div>
+      </div>
+    </div>
+
+    <div id="agendamentoModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Agendar Envio</h2>
+          <span class="close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+          <form id="agendamentoForm">
+            <input type="hidden" id="agendarProdutoId" />
+            <div class="form-group">
+              <label for="agendarData">Data</label>
+              <input type="date" id="agendarData" required />
+            </div>
+            <div class="form-group">
+              <label for="agendarHora">Hora</label>
+              <input type="time" id="agendarHora" required />
+            </div>
+            <div class="modal-footer">
+              <button type="submit" class="btn">Salvar Agendamento</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  </body>
+</html>
