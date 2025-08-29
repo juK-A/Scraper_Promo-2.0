@@ -10,6 +10,84 @@ window.closeModal = function () {
   document.getElementById("agendamentoModal").style.display = "none";
 };
 
+window.openEditarForm = function (produtoId) {
+  document.getElementById("editarProdutoId").value = produtoId;
+  
+  // Limpar os campos
+  document.getElementById("editarImagemUrl").value = "";
+  document.getElementById("editarMensagem").value = "";
+  
+  // Resetar preview
+  updateImagePreview();
+  
+  // Buscar dados atuais do produto
+  fetch(`/produtos/${produtoId}`, { method: "GET" })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        const produto = data.produto;
+        document.getElementById("editarImagemUrl").value = produto.imagem_url || "";
+        document.getElementById("editarMensagem").value = produto.final_message || "";
+        
+        // Atualizar preview da imagem após carregar os dados
+        updateImagePreview();
+      }
+    })
+    .catch(error => {
+      console.error("Erro ao carregar dados do produto:", error);
+    });
+  
+  document.getElementById("editarModal").style.display = "block";
+};
+
+window.closeEditModal = function () {
+  document.getElementById("editarModal").style.display = "none";
+};
+
+window.updateImagePreview = function () {
+  const imageUrl = document.getElementById("editarImagemUrl").value.trim();
+  const imagePreview = document.getElementById("imagePreview");
+  const placeholder = document.getElementById("imagePreviewPlaceholder");
+  
+  if (imageUrl && isValidImageUrl(imageUrl)) {
+    imagePreview.src = imageUrl;
+    imagePreview.style.display = "block";
+    placeholder.style.display = "none";
+    
+    // Adiciona eventos para lidar com erro de carregamento
+    imagePreview.onload = function() {
+      imagePreview.style.display = "block";
+      placeholder.style.display = "none";
+    };
+    
+    imagePreview.onerror = function() {
+      imagePreview.style.display = "none";
+      placeholder.style.display = "block";
+      placeholder.innerHTML = "❌ Erro ao carregar imagem";
+    };
+  } else {
+    imagePreview.style.display = "none";
+    placeholder.style.display = "block";
+    if (imageUrl && !isValidImageUrl(imageUrl)) {
+      placeholder.innerHTML = "⚠️ URL de imagem inválida";
+    } else {
+      placeholder.innerHTML = "📷 Nenhuma imagem para mostrar";
+    }
+  }
+};
+
+function isValidImageUrl(url) {
+  try {
+    new URL(url);
+    // Verifica se tem extensão de imagem comum ou se é de um domínio conhecido de imagens
+    const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i;
+    const knownImageDomains = /(mlstatic\.com|imgur\.com|cloudinary\.com)/i;
+    return imageExtensions.test(url) || knownImageDomains.test(url) || url.includes('http');
+  } catch {
+    return false;
+  }
+}
+
 // ===== INÍCIO DA ALTERAÇÃO =====
 window.deletarAgendamento = async function (produtoId, buttonElement) {
   if (!confirm("Tem certeza que deseja excluir este produto?")) {
@@ -330,9 +408,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const status = document.getElementById("filtroStatus").value;
     const ordem = document.getElementById("filtroOrdem").value;
 
-    let url = `/produtos?status=${status}&ordem=${ordem}`;
+    let url = `/produtos?status=${status}&ordem=${ordem}&_t=${Date.now()}`;
     if (status === "todos") {
-      url = `/produtos?status=todos&ordem=${ordem}`;
+      url = `/produtos?status=todos&ordem=${ordem}&_t=${Date.now()}`;
     }
 
     try {
@@ -374,6 +452,7 @@ document.addEventListener("DOMContentLoaded", function () {
       acoesBtn = `
           <div class="agendamento-acoes">
               <button class="btn" onclick="openAgendamentoForm('${produto.id}')">Reagendar</button>
+              <button class="btn" onclick="openEditarForm('${produto.id}')" style="background-color: #28a745;">Editar</button>
               <button class="btn-excluir" onclick="deletarAgendamento('${produto.id}', this)">Excluir</button>
           </div>
       `;
@@ -382,18 +461,19 @@ document.addEventListener("DOMContentLoaded", function () {
       acoesBtn = `
           <div class="agendamento-acoes">
               <button class="btn" onclick="openAgendamentoForm('${produto.id}')">Agendar</button>
+              <button class="btn" onclick="openEditarForm('${produto.id}')" style="background-color: #28a745;">Editar</button>
               <button class="btn-excluir" onclick="deletarAgendamento('${produto.id}', this)">Excluir</button>
           </div>
       `;
     }
 
+    // Prioriza imagem_url se foi editada recentemente, senão usa processed_image_url como fallback
+    const imagemParaUsar = produto.imagem_url || produto.processed_image_url || "";
+    const imagemComCache = imagemParaUsar ? `${imagemParaUsar}?t=${Date.now()}` : "";
+
     card.innerHTML = `
         <div class="product-header">
-          <img src="${
-            produto.processed_image_url || produto.imagem_url || ""
-          }" alt="${
-      produto.titulo
-    }" class="product-image">
+          <img src="${imagemComCache}" alt="${produto.titulo}" class="product-image">
           <div class="product-info">
             <div class="product-title">${produto.titulo}</div>
             <div class="product-price-atual">${produto.preco_atual}</div>
@@ -449,10 +529,62 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
 
+  document
+    .getElementById("editarForm")
+    .addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const produtoId = document.getElementById("editarProdutoId").value;
+      const imagemUrl = document.getElementById("editarImagemUrl").value.trim();
+      const mensagem = document.getElementById("editarMensagem").value.trim();
+
+      if (!imagemUrl && !mensagem) {
+        showAlert("Por favor, preencha pelo menos um campo para edição.", "error");
+        return;
+      }
+
+      loading.style.display = "block";
+      loading.querySelector("p").textContent = "Salvando alterações...";
+      closeEditModal();
+
+      try {
+        const dadosEdicao = {};
+        if (imagemUrl) dadosEdicao.imagem_url = imagemUrl;
+        if (mensagem) dadosEdicao.final_message = mensagem;
+
+        const response = await fetch(`/produtos/${produtoId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(dadosEdicao),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          showAlert(data.message, "success");
+          // Força a recarga da lista com um pequeno delay para garantir que o servidor processou
+          setTimeout(() => {
+            loadAgendamentos();
+          }, 500);
+        } else {
+          showAlert(data.error || "Erro ao editar produto", "error");
+        }
+      } catch (error) {
+        showAlert(
+          "Erro ao editar o produto. Verifique o console.",
+          "error"
+        );
+      } finally {
+        loading.style.display = "none";
+      }
+    });
+
   window.onclick = function (event) {
-    const modal = document.getElementById("agendamentoModal");
-    if (event.target == modal) {
+    const agendamentoModal = document.getElementById("agendamentoModal");
+    const editarModal = document.getElementById("editarModal");
+    
+    if (event.target == agendamentoModal) {
       closeModal();
+    } else if (event.target == editarModal) {
+      closeEditModal();
     }
   };
 

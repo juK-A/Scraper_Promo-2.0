@@ -68,3 +68,18 @@ def deletar_produto_db(produto_id):
 def agendar_produto_db(produto_id, agendamento_iso):
     """Atualiza o agendamento de um produto no Supabase."""
     return supabase.table("promocoes_beauty").update({'agendamento': agendamento_iso}).eq("id", produto_id).execute()
+
+def obter_produto_db(produto_id):
+    """Busca um produto específico no Supabase pelo ID."""
+    try:
+        response = supabase.table("promocoes_beauty").select("*").eq("id", produto_id).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+        return None
+    except Exception as e:
+        print(f"Erro ao buscar produto no Supabase: {e}")
+        return None
+
+def atualizar_produto_db(produto_id, dados_atualizacao):
+    """Atualiza dados específicos de um produto no Supabase."""
+    return supabase.table("promocoes_beauty").update(dados_atualizacao).eq("id", produto_id).execute()

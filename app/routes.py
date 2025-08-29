@@ -228,3 +228,39 @@ def listar_produtos():
         return jsonify({'success': True, 'produtos': produtos})
     except Exception as e:
         return jsonify({'success': False, 'error': f'Erro ao listar produtos do Supabase: {str(e)}'}), 500
+
+@main_bp.route('/produtos/<string:produto_id>', methods=['GET'])
+def obter_produto(produto_id):
+    try:
+        produto = database.obter_produto_db(produto_id)
+        if produto:
+            return jsonify({'success': True, 'produto': produto})
+        else:
+            return jsonify({'success': False, 'error': 'Produto não encontrado'}), 404
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Erro interno: {str(e)}'}), 500
+
+@main_bp.route('/produtos/<string:produto_id>', methods=['PUT'])
+def editar_produto(produto_id):
+    try:
+        data = request.get_json()
+        imagem_url = data.get('imagem_url', '').strip()
+        final_message = data.get('final_message', '').strip()
+        
+        if not imagem_url and not final_message:
+            return jsonify({'error': 'Pelo menos um campo deve ser fornecido para edição'}), 400
+        
+        dados_atualizacao = {}
+        if imagem_url:
+            dados_atualizacao['imagem_url'] = imagem_url
+        if final_message:
+            dados_atualizacao['final_message'] = final_message
+        
+        response = database.atualizar_produto_db(produto_id, dados_atualizacao)
+        if response.data and len(response.data) > 0:
+            return jsonify({'success': True, 'message': 'Produto atualizado com sucesso!'})
+        else:
+            return jsonify({'success': False, 'error': f'Produto com ID {produto_id} não encontrado.'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
