@@ -42,7 +42,7 @@ def extrair_precos(produto_elem):
             desconto_elem=produto_elem.select_one(selector)
             if desconto_elem:
                 texto_desconto=desconto_elem.get_text().strip();match=re.search(r'(\d+%)',texto_desconto)
-                if match:desconto=match.group(1);tem_promocao=True;break
+                if match:desconto=int(match.group(1).replace('%', ''));tem_promocao=True;break
         preco_original_selectors=['.ui-search-price__original-value .andes-money-amount__fraction','.ui-search-price__part--original .andes-money-amount__fraction','.price-tag-text-line .andes-money-amount__fraction','s .andes-money-amount__fraction','.ui-search-price__part--strikethrough .andes-money-amount__fraction','.ui-search-price__original-value','.andes-money-amount--previous .andes-money-amount__fraction','[data-testid="price-original"] .andes-money-amount__fraction']
         preco_original=None
         for selector in preco_original_selectors:
@@ -161,7 +161,7 @@ def scrape_produto_especifico(url):
             'titulo': 'Produto não encontrado', 'preco_atual': 'Preço não disponível',
             'preco_original': None, 'desconto': None, 'tem_promocao': False,
             'imagem': '', 'descricao': '', 'vendedor': '', 'condicao': '',
-            'disponivel': '', 'cupons': [], 'link': url
+            'disponivel': False, 'cupons': [], 'link': url
         }
         titulo_selectors = ['h1.ui-pdp-title', 'h1[class*="title"]', '.ui-pdp-title', 'h1', '[data-testid="product-title"]']
         for selector in titulo_selectors:
@@ -212,7 +212,7 @@ def scrape_produto_especifico(url):
                     texto_desconto = desconto_elem.get_text().strip()
                     match = re.search(r'(\d+%)', texto_desconto)
                     if match:
-                        desconto = match.group(1)
+                        desconto = int(match.group(1).replace('%', ''))
                         tem_promocao = True
                         break
             preco_original_selectors = [
@@ -303,7 +303,8 @@ def scrape_produto_especifico(url):
         for selector in disponivel_selectors:
             disp_elem = site.select_one(selector)
             if disp_elem:
-                produto_info['disponivel'] = disp_elem.get_text().strip()
+                texto_disponivel = disp_elem.get_text().strip().lower()
+                produto_info['disponivel'] = bool(texto_disponivel and 'disponível' in texto_disponivel)
                 break
         desc_selectors = ['.ui-pdp-description__content p', '.item-description p', '[class*="description"] p']
         for selector in desc_selectors:

@@ -38,7 +38,7 @@ def salvar_promocao(produto_dados, final_message=None, agendamento_data=None):
             "processed_image_url": produto_dados.get("processed_image_url")
         }
         
-        supabase.table("promocoes_beauty").insert(data_to_insert).execute()
+        supabase.table("promocoes").insert(data_to_insert).execute()
         print("DEBUG: Dados salvos no Supabase.")
         return True
         
@@ -48,7 +48,7 @@ def salvar_promocao(produto_dados, final_message=None, agendamento_data=None):
 
 def listar_produtos_db(status_filter, ordem_order):
     """Lista produtos do Supabase com base nos filtros."""
-    query = supabase.table("promocoes_beauty").select("*")
+    query = supabase.table("promocoes").select("*")
     if status_filter == 'agendado':
         query = query.not_.is_("agendamento", "null")
         query = query.order("agendamento", desc=(ordem_order == 'desc'))
@@ -63,16 +63,16 @@ def listar_produtos_db(status_filter, ordem_order):
 
 def deletar_produto_db(produto_id):
     """Deleta um produto do Supabase pelo ID."""
-    return supabase.table("promocoes_beauty").delete().eq("id", produto_id).execute()
+    return supabase.table("promocoes").delete().eq("id", produto_id).execute()
 
 def agendar_produto_db(produto_id, agendamento_iso):
     """Atualiza o agendamento de um produto no Supabase."""
-    return supabase.table("promocoes_beauty").update({'agendamento': agendamento_iso}).eq("id", produto_id).execute()
+    return supabase.table("promocoes").update({'agendamento': agendamento_iso}).eq("id", produto_id).execute()
 
 def obter_produto_db(produto_id):
     """Busca um produto específico no Supabase pelo ID."""
     try:
-        response = supabase.table("promocoes_beauty").select("*").eq("id", produto_id).execute()
+        response = supabase.table("promocoes").select("*").eq("id", produto_id).execute()
         if response.data and len(response.data) > 0:
             return response.data[0]
         return None
@@ -82,4 +82,4 @@ def obter_produto_db(produto_id):
 
 def atualizar_produto_db(produto_id, dados_atualizacao):
     """Atualiza dados específicos de um produto no Supabase."""
-    return supabase.table("promocoes_beauty").update(dados_atualizacao).eq("id", produto_id).execute()
+    return supabase.table("promocoes").update(dados_atualizacao).eq("id", produto_id).execute()

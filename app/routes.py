@@ -121,7 +121,7 @@ def enviar_webhook():
 ⏰ **Analisado em:** {datetime.datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y às %H:%M:%S')}"""
 
             payload = {
-                "command": "Mensagem",
+                "command": "tech",
                 "message": mensagem_completa.strip(),
                 "type": "produto_promocao" if produto_para_salvar.get('tem_promocao') else "produto_normal",
                 "produto_dados": produto_para_salvar,
@@ -264,3 +264,115 @@ def editar_produto(produto_id):
             
     except Exception as e:
         return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+
+@main_bp.route('/enviar_produto_agendado/<string:produto_id>', methods=['POST'])
+def enviar_produto_agendado(produto_id):
+    try:
+        data = request.get_json()
+        afiliado_link = data.get('afiliado_link', '').strip()
+        
+        # Busca o produto no banco de dados (com dados editados)
+        produto_db = database.obter_produto_db(produto_id)
+        if not produto_db:
+            return jsonify({'error': 'Produto não encontrado'}), 404
+        
+        # Monta o produto usando dados do banco (dados editados)
+        produto_para_webhook = {
+            'titulo': produto_db.get('titulo'),
+            'preco_atual': produto_db.get('preco_atual'),
+            'preco_original': produto_db.get('preco_original'),
+            'desconto': produto_db.get('desconto'),
+            'tem_promocao': produto_db.get('preco_original') is not None,
+            'imagem': produto_db.get('imagem_url') or produto_db.get('processed_image_url'),  # USA IMAGEM EDITADA
+            'link': produto_db.get('link_produto'),
+            'descricao': produto_db.get('descricao'),
+            'condicao': produto_db.get('condicao'),
+            'vendedor': produto_db.get('vendedor'),
+            'disponivel': produto_db.get('disponivel'),
+            'cupons': produto_db.get('cupons', []),
+            'afiliado_link': afiliado_link
+        }
+
+        # LÓGICA PARA MONTAR O PAYLOAD COM DADOS DO BANCO
+        promocao_info = ""
+        if produto_para_webhook.get('tem_promocao'):
+            promocao_info = f"""🔥 **PRODUTO EM PROMOÇÃO!**
+💰 Preço Original: {produto_para_webhook.get('preco_original', 'N/A')}
+💸 Preço Atual: {produto_para_webhook.get('preco_atual', 'N/A')}
+🏷️ Desconto: {produto_para_webhook.get('desconto', 'N/A')}"""
+        else:
+            promocao_info = f"💵 Preço: {produto_para_webhook.get('preco_atual', 'N/A')}"
+        
+        detalhes_extras = [f"📦 Condição: {c}" for c in [produto_para_webhook.get('condicao')] if c]
+        detalhes_extras.extend([f"🏪 Vendedor: {v}" for v in [produto_para_webhook.get('vendedor')] if v])
+        detalhes_extras.extend([f"📊 Disponibilidade: {d}" for d in [produto_para_webhook.get('disponivel')] if d])
+        
+        cupons = produto_para_webhook.get('cupons', [])
+        if cupons: detalhes_extras.append(f"🎫 Cupons Disponíveis: {', '.join(cupons)}")
+        
+        detalhes_texto = "\n".join(detalhes_extras)
+        final_link = afiliado_link if afiliado_link else produto_para_webhook.get('link', 'N/A')
+        
+        # USA A MENSAGEM EDITADA SE EXISTIR, SENÃO USA A PADRÃO
+        if produto_db.get('final_message'):
+            mensagem_completa = produto_db.get('final_message')
+        else:
+            descricao_texto = produto_para_webhook.get('descricao', 'Não disponível')
+            descricao_curta = f"{descricao_texto[:200]}{'...' if len(descricao_texto) > 200 else ''}"
+            
+            mensagem_completa = f"""🛒 **PRODUTO ENCONTRADO NO MERCADO LIVRE**
+🔍 **Título:** {produto_para_webhook.get('titulo', 'N/A')}
+{promocao_info}
+{detalhes_texto}
+🔗 **Link:** {final_link}
+📄 **Descrição:** {descricao_curta}
+⏰ **Analisado em:** {datetime.datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y às %H:%M:%S')}"""
+
+        payload = {
+            "command": "Mensagem",
+            "message": mensagem_completa.strip(),
+            "type": "produto_promocao" if produto_para_webhook.get('tem_promocao') else "produto_normal",
+            "produto_dados": produto_para_webhook,
+            "timestamp": time.time(),
+            "source": "Mercado Livre Scraper - Produto Agendado"
+        }
+        
+        # CHAMA O SERVIÇO DE WEBHOOK
+        response = services.enviar_para_webhook(payload)
+        
+        # TRATA A RESPOSTA
+        if response.status_code in [200, 201, 202]:
+            try:
+                n8n_response_data = response.json()
+                final_message = n8n_response_data.get('message', 'Mensagem final não recebida.')
+                image_url = n8n_response_data.get('image_url', '')
+                
+                return jsonify({
+                    'success': True, 
+                    'message': 'Produto enviado com sucesso!', 
+                    'final_message': final_message, 
+                    'image_url': image_url, 
+                    'webhook_status': response.status_code
+                })
+            except requests.exceptions.JSONDecodeError:
+                return jsonify({
+                    'success': True, 
+                    'message': 'Produto enviado, mas resposta não é JSON.', 
+                    'final_message': response.text, 
+                    'image_url': '', 
+                    'webhook_status': response.status_code
+                })
+        else:
+            return jsonify({
+                'error': f'Webhook retornou status {response.status_code}', 
+                'webhook_response': response.text, 
+                'final_message': response.text, 
+                'image_url': ''
+            }), 400
+        
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'Timeout ao enviar webhook', 'final_message': 'Timeout'}), 408
+    except requests.exceptions.ConnectionError:
+        return jsonify({'error': 'Erro de conexão com o webhook', 'final_message': 'Erro de conexão'}), 503
+    except Exception as e:
+        return jsonify({'error': f'Erro interno: {str(e)}', 'final_message': f'Erro interno: {str(e)}'}), 500

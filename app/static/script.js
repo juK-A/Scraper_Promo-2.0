@@ -12,31 +12,33 @@ window.closeModal = function () {
 
 window.openEditarForm = function (produtoId) {
   document.getElementById("editarProdutoId").value = produtoId;
-  
+
   // Limpar os campos
   document.getElementById("editarImagemUrl").value = "";
   document.getElementById("editarMensagem").value = "";
-  
+
   // Resetar preview
   updateImagePreview();
-  
+
   // Buscar dados atuais do produto
   fetch(`/produtos/${produtoId}`, { method: "GET" })
-    .then(response => response.json())
-    .then(data => {
+    .then((response) => response.json())
+    .then((data) => {
       if (data.success) {
         const produto = data.produto;
-        document.getElementById("editarImagemUrl").value = produto.imagem_url || "";
-        document.getElementById("editarMensagem").value = produto.final_message || "";
-        
+        document.getElementById("editarImagemUrl").value =
+          produto.imagem_url || "";
+        document.getElementById("editarMensagem").value =
+          produto.final_message || "";
+
         // Atualizar preview da imagem após carregar os dados
         updateImagePreview();
       }
     })
-    .catch(error => {
+    .catch((error) => {
       console.error("Erro ao carregar dados do produto:", error);
     });
-  
+
   document.getElementById("editarModal").style.display = "block";
 };
 
@@ -44,23 +46,97 @@ window.closeEditModal = function () {
   document.getElementById("editarModal").style.display = "none";
 };
 
+window.enviarProdutoAgendado = async function (produtoId) {
+  if (
+    !confirm(
+      "Deseja enviar este produto para o webhook? Isso irá usar os dados editados (imagem e mensagem personalizadas)."
+    )
+  ) {
+    return;
+  }
+
+  const loading = document.getElementById("loading");
+  loading.style.display = "block";
+  loading.querySelector("p").textContent = "Enviando produto para webhook...";
+
+  try {
+    // Você pode solicitar o link afiliado aqui ou usar vazio
+    const afiliadoLink = prompt("Cole o link de afiliado (opcional):");
+
+    const response = await fetch(`/enviar_produto_agendado/${produtoId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        afiliado_link: afiliadoLink || "",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      showAlert("Produto enviado com sucesso! ✅", "success");
+
+      // Mostra a resposta do webhook se houver
+      if (data.final_message) {
+        displayWebhookResponse(data.final_message, data.image_url);
+      }
+    } else {
+      showAlert(`Erro ao enviar: ${data.error}`, "error");
+    }
+  } catch (error) {
+    console.error("Erro ao enviar produto:", error);
+    showAlert("Erro de conexão ao enviar produto.", "error");
+  } finally {
+    loading.style.display = "none";
+  }
+};
+
+function displayWebhookResponse(message, imageUrl) {
+  const webhookMessageSection = document.getElementById(
+    "webhookMessageSection"
+  );
+  const webhookMessageContent = document.getElementById(
+    "webhookMessageContent"
+  );
+
+  let imageHtml = "";
+  if (imageUrl && imageUrl.trim()) {
+    imageHtml = `<div class="webhook-image"><img src="${imageUrl}" alt="Imagem do Produto"></div>`;
+  }
+
+  const messageHtml = `
+    <div class="webhook-message-container success" style="margin-bottom: 20px;">
+      <div class="webhook-message-header">
+        <h3>✅ Produto Enviado com Sucesso</h3>
+        <span class="status success">SUCCESS</span>
+      </div>
+      ${imageHtml}
+      <pre>${message}</pre>
+    </div>
+  `;
+
+  webhookMessageContent.innerHTML = messageHtml;
+  webhookMessageSection.style.display = "block";
+  webhookMessageSection.scrollIntoView({ behavior: "smooth" });
+}
+
 window.updateImagePreview = function () {
   const imageUrl = document.getElementById("editarImagemUrl").value.trim();
   const imagePreview = document.getElementById("imagePreview");
   const placeholder = document.getElementById("imagePreviewPlaceholder");
-  
+
   if (imageUrl && isValidImageUrl(imageUrl)) {
     imagePreview.src = imageUrl;
     imagePreview.style.display = "block";
     placeholder.style.display = "none";
-    
+
     // Adiciona eventos para lidar com erro de carregamento
-    imagePreview.onload = function() {
+    imagePreview.onload = function () {
       imagePreview.style.display = "block";
       placeholder.style.display = "none";
     };
-    
-    imagePreview.onerror = function() {
+
+    imagePreview.onerror = function () {
       imagePreview.style.display = "none";
       placeholder.style.display = "block";
       placeholder.innerHTML = "❌ Erro ao carregar imagem";
@@ -82,7 +158,11 @@ function isValidImageUrl(url) {
     // Verifica se tem extensão de imagem comum ou se é de um domínio conhecido de imagens
     const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i;
     const knownImageDomains = /(mlstatic\.com|imgur\.com|cloudinary\.com)/i;
-    return imageExtensions.test(url) || knownImageDomains.test(url) || url.includes('http');
+    return (
+      imageExtensions.test(url) ||
+      knownImageDomains.test(url) ||
+      url.includes("http")
+    );
   } catch {
     return false;
   }
@@ -99,8 +179,8 @@ window.deletarAgendamento = async function (produtoId, buttonElement) {
 
   // 2. Remove o card da tela IMEDIATAMENTE para o efeito instantâneo.
   if (cardParaRemover) {
-    cardParaRemover.style.transition = 'opacity 0.3s ease-out';
-    cardParaRemover.style.opacity = '0';
+    cardParaRemover.style.transition = "opacity 0.3s ease-out";
+    cardParaRemover.style.opacity = "0";
     setTimeout(() => cardParaRemover.remove(), 300); // Remove do DOM após a transição
   }
 
@@ -119,7 +199,7 @@ window.deletarAgendamento = async function (produtoId, buttonElement) {
       // 4. Se a exclusão falhar no servidor, mostra o erro e recarrega a lista
       // para que o item reapareça, mantendo a consistência.
       showAlert(data.error || "Erro ao excluir o produto.", "error");
-      loadAgendamentos(); 
+      loadAgendamentos();
     }
   } catch (error) {
     // 5. Se houver um erro de conexão, faz a mesma coisa.
@@ -253,10 +333,7 @@ document.addEventListener("DOMContentLoaded", function () {
       !url.includes("mercadolivre.com") &&
       !url.includes("mercadolibre.com")
     ) {
-      showAlert(
-        "Por favor, use um link válido do Mercado Livre",
-        "error"
-      );
+      showAlert("Por favor, use um link válido do Mercado Livre", "error");
       return;
     }
 
@@ -322,7 +399,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const parts = line.split(",");
 
       const productUrl = parts[0] ? parts[0].trim() : "";
-      const affiliateLink = parts[1] ? parts[1].trim() : ""; 
+      const affiliateLink = parts[1] ? parts[1].trim() : "";
 
       loading.querySelector("p").textContent = `Processando ${i + 1} de ${
         lines.length
@@ -400,39 +477,39 @@ document.addEventListener("DOMContentLoaded", function () {
       "Processamento em lote finalizado!";
     webhookBtn.disabled = false;
   });
-  
-  async function loadAgendamentos() {
-    const agendamentoList = document.getElementById("agendamento-list");
-    agendamentoList.innerHTML = "<p>Carregando produtos...</p>";
 
-    const status = document.getElementById("filtroStatus").value;
-    const ordem = document.getElementById("filtroOrdem").value;
+    async function loadAgendamentos() {
+      const agendamentoList = document.getElementById("agendamento-list");
+      agendamentoList.innerHTML = "<p>Carregando produtos...</p>";
 
-    let url = `/produtos?status=${status}&ordem=${ordem}&_t=${Date.now()}`;
-    if (status === "todos") {
-      url = `/produtos?status=todos&ordem=${ordem}&_t=${Date.now()}`;
-    }
+      const status = document.getElementById("filtroStatus").value;
+      const ordem = document.getElementById("filtroOrdem").value;
 
-    try {
-      const response = await fetch(url, { method: "GET" });
-      const data = await response.json();
-
-      if (data.success && data.produtos.length > 0) {
-        agendamentoList.innerHTML = "";
-        data.produtos.forEach((produto) => {
-          const card = createAgendamentoCard(produto, status);
-          agendamentoList.appendChild(card);
-        });
-      } else {
-        agendamentoList.innerHTML =
-          "<p>Nenhum produto encontrado com os filtros selecionados.</p>";
+      let url = `/produtos?status=${status}&ordem=${ordem}&_t=${Date.now()}`;
+      if (status === "todos") {
+        url = `/produtos?status=todos&ordem=${ordem}&_t=${Date.now()}`;
       }
-    } catch (error) {
-      console.error("Erro ao carregar agendamentos:", error);
-      agendamentoList.innerHTML =
-        "<p>Erro ao carregar a lista de produtos. Verifique o console.</p>";
+
+      try {
+        const response = await fetch(url, { method: "GET" });
+        const data = await response.json();
+
+        if (data.success && data.produtos.length > 0) {
+          agendamentoList.innerHTML = "";
+          data.produtos.forEach((produto) => {
+            const card = createAgendamentoCard(produto, status);
+            agendamentoList.appendChild(card);
+          });
+        } else {
+          agendamentoList.innerHTML =
+            "<p>Nenhum produto encontrado com os filtros selecionados.</p>";
+        }
+      } catch (error) {
+        console.error("Erro ao carregar agendamentos:", error);
+        agendamentoList.innerHTML =
+          "<p>Erro ao carregar a lista de produtos. Verifique o console.</p>";
+      }
     }
-  }
 
   filtroAgendamentoForm.addEventListener("submit", function (e) {
     e.preventDefault();
@@ -453,6 +530,7 @@ document.addEventListener("DOMContentLoaded", function () {
           <div class="agendamento-acoes">
               <button class="btn" onclick="openAgendamentoForm('${produto.id}')">Reagendar</button>
               <button class="btn" onclick="openEditarForm('${produto.id}')" style="background-color: #28a745;">Editar</button>
+              <button class="btn" onclick="enviarProdutoAgendado('${produto.id}')" style="background-color: #007bff;">Enviar</button>
               <button class="btn-excluir" onclick="deletarAgendamento('${produto.id}', this)">Excluir</button>
           </div>
       `;
@@ -462,14 +540,18 @@ document.addEventListener("DOMContentLoaded", function () {
           <div class="agendamento-acoes">
               <button class="btn" onclick="openAgendamentoForm('${produto.id}')">Agendar</button>
               <button class="btn" onclick="openEditarForm('${produto.id}')" style="background-color: #28a745;">Editar</button>
+              <button class="btn" onclick="enviarProdutoAgendado('${produto.id}')" style="background-color: #007bff;">Enviar</button>
               <button class="btn-excluir" onclick="deletarAgendamento('${produto.id}', this)">Excluir</button>
           </div>
       `;
     }
 
     // Prioriza imagem_url se foi editada recentemente, senão usa processed_image_url como fallback
-    const imagemParaUsar = produto.imagem_url || produto.processed_image_url || "";
-    const imagemComCache = imagemParaUsar ? `${imagemParaUsar}?t=${Date.now()}` : "";
+    const imagemParaUsar =
+      produto.imagem_url || produto.processed_image_url || "";
+    const imagemComCache = imagemParaUsar
+      ? `${imagemParaUsar}?t=${Date.now()}`
+      : "";
 
     card.innerHTML = `
         <div class="product-header">
@@ -520,10 +602,7 @@ document.addEventListener("DOMContentLoaded", function () {
           showAlert(data.error, "error");
         }
       } catch (error) {
-        showAlert(
-          "Erro ao agendar o produto. Verifique o console.",
-          "error"
-        );
+        showAlert("Erro ao agendar o produto. Verifique o console.", "error");
       } finally {
         loading.style.display = "none";
       }
@@ -538,7 +617,10 @@ document.addEventListener("DOMContentLoaded", function () {
       const mensagem = document.getElementById("editarMensagem").value.trim();
 
       if (!imagemUrl && !mensagem) {
-        showAlert("Por favor, preencha pelo menos um campo para edição.", "error");
+        showAlert(
+          "Por favor, preencha pelo menos um campo para edição.",
+          "error"
+        );
         return;
       }
 
@@ -568,10 +650,7 @@ document.addEventListener("DOMContentLoaded", function () {
           showAlert(data.error || "Erro ao editar produto", "error");
         }
       } catch (error) {
-        showAlert(
-          "Erro ao editar o produto. Verifique o console.",
-          "error"
-        );
+        showAlert("Erro ao editar o produto. Verifique o console.", "error");
       } finally {
         loading.style.display = "none";
       }
@@ -580,7 +659,7 @@ document.addEventListener("DOMContentLoaded", function () {
   window.onclick = function (event) {
     const agendamentoModal = document.getElementById("agendamentoModal");
     const editarModal = document.getElementById("editarModal");
-    
+
     if (event.target == agendamentoModal) {
       closeModal();
     } else if (event.target == editarModal) {
@@ -647,9 +726,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (produto.tem_promocao && produto.preco_original) {
       precoHtml = `
         <div class="product-price com-promocao">
-          <div class="product-price-original">${
-            produto.preco_original
-          }</div>
+          <div class="product-price-original">${produto.preco_original}</div>
           <div class="product-price-atual">${produto.preco_atual}</div>
           ${
             produto.desconto
@@ -683,9 +760,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (produto.tem_promocao && produto.preco_original) {
       precoHtml = `
         <div class="produto-preco com-promocao">
-          <div class="produto-preco-original">${
-            produto.preco_original
-          }</div>
+          <div class="produto-preco-original">${produto.preco_original}</div>
           <div class="produto-preco-atual">${produto.preco_atual}</div>
           ${
             produto.desconto
@@ -718,9 +793,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     return `
-      <div class="produto-detalhado ${
-        produto.tem_promocao ? "promocao" : ""
-      }">
+      <div class="produto-detalhado ${produto.tem_promocao ? "promocao" : ""}">
         <div class="produto-header">
           ${imagemHtml}
           <div class="produto-info">
@@ -798,12 +871,7 @@ document.addEventListener("DOMContentLoaded", function () {
     `;
   }
 
-  function displayWebhookMessage(
-    message,
-    type,
-    imageUrl,
-    append = false
-  ) {
+  function displayWebhookMessage(message, type, imageUrl, append = false) {
     const container = document.getElementById("webhookMessageContent");
     if (!append) {
       container.innerHTML = "";
@@ -837,10 +905,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (element) {
       try {
         await navigator.clipboard.writeText(element.textContent);
-        showAlert(
-          "Mensagem copiada para a área de transferência!",
-          "info"
-        );
+        showAlert("Mensagem copiada para a área de transferência!", "info");
       } catch (err) {
         console.error("Erro ao copiar a mensagem: ", err);
         showAlert("Erro ao copiar a mensagem.", "error");
