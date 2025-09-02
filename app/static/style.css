@@ -744,7 +744,7 @@ body {
 
 /* Estilização para o conteúdo do texto, melhorando a aparência de <pre> */
 .webhook-message-container pre {
-  background: #f1f3f5;
+  background: #303030;
   border-left: 5px solid var(--primary-color);
   padding: 20px;
   border-radius: 8px;
