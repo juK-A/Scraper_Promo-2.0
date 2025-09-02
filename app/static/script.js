@@ -210,6 +210,36 @@ window.deletarAgendamento = async function (produtoId, buttonElement) {
 // ===== FIM DA ALTERAÇÃO =====
 
 document.addEventListener("DOMContentLoaded", function () {
+  // Configuração do modo escuro
+  const themeToggle = document.getElementById("themeToggle");
+  const savedTheme = localStorage.getItem("theme") || "light";
+  
+  // Aplicar tema salvo
+  if (savedTheme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    themeToggle.textContent = "☀️";
+  } else {
+    themeToggle.textContent = "🌙";
+  }
+  
+  // Toggle do modo escuro
+  themeToggle.addEventListener("click", function() {
+    const currentTheme = document.documentElement.getAttribute("data-theme");
+    const newTheme = currentTheme === "dark" ? "light" : "dark";
+    
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem("theme", newTheme);
+    
+    // Atualizar ícone
+    themeToggle.textContent = newTheme === "dark" ? "☀️" : "🌙";
+    
+    // Notificação
+    showAlert(
+      `Modo ${newTheme === "dark" ? "escuro" : "claro"} ativado!`,
+      "info"
+    );
+  });
+
   const searchForm = document.getElementById("searchForm");
   const linkForm = document.getElementById("linkForm");
   const webhookForm = document.getElementById("webhookForm");
@@ -232,6 +262,21 @@ document.addEventListener("DOMContentLoaded", function () {
   const linkBtn = document.getElementById("linkBtn");
   const webhookBtn = document.getElementById("webhookBtn");
 
+  // Variáveis da nova interface de webhook
+  let productQueue = [];
+  
+  // Elementos da nova interface
+  const inputMethods = document.querySelectorAll('.input-method');
+  const inputContents = document.querySelectorAll('.input-content');
+  const addProductBtn = document.getElementById('addProductBtn');
+  const productUrlInput = document.getElementById('productUrl');
+  const affiliateUrlInput = document.getElementById('affiliateUrl');
+  const queueList = document.getElementById('queueList');
+  const queueCount = document.querySelector('.queue-count');
+  const processCount = document.getElementById('processCount');
+  const clearQueueBtn = document.getElementById('clearQueueBtn');
+  const importFromBulkBtn = document.getElementById('importFromBulkBtn');
+
   const clearWebhookTextareaBtn = document.getElementById(
     "clearWebhookTextareaBtn"
   );
@@ -241,6 +286,164 @@ document.addEventListener("DOMContentLoaded", function () {
     webhookUrlsTextarea.value = ""; // Limpa o conteúdo
     webhookUrlsTextarea.focus(); // Opcional: foca no campo após limpar
   });
+
+  // === NOVA INTERFACE DE WEBHOOK ===
+  
+  // Alternar entre modos (Visual/Massa)
+  inputMethods.forEach(method => {
+    method.addEventListener('click', () => {
+      const methodType = method.dataset.method;
+      
+      // Remove active de todos
+      inputMethods.forEach(m => m.classList.remove('active'));
+      inputContents.forEach(c => c.classList.remove('active'));
+      
+      // Ativa o selecionado
+      method.classList.add('active');
+      document.querySelector(`.${methodType}-mode`).classList.add('active');
+    });
+  });
+
+  // Adicionar produto à fila
+  addProductBtn.addEventListener('click', () => {
+    const productUrl = productUrlInput.value.trim();
+    const affiliateUrl = affiliateUrlInput.value.trim();
+
+    if (!productUrl) {
+      showAlert('Por favor, insira um link de produto', 'error');
+      return;
+    }
+
+    if (!productUrl.includes('mercadolivre.com') && !productUrl.includes('mercadolibre.com')) {
+      showAlert('Por favor, use um link válido do Mercado Livre', 'error');
+      return;
+    }
+
+    // Verificar se já existe na fila
+    const exists = productQueue.some(item => item.productUrl === productUrl);
+    if (exists) {
+      showAlert('Este produto já está na fila', 'warning');
+      return;
+    }
+
+    // Adicionar à fila
+    const queueItem = {
+      id: Date.now(),
+      productUrl: productUrl,
+      affiliateUrl: affiliateUrl || '',
+      addedAt: new Date().toLocaleTimeString()
+    };
+
+    productQueue.push(queueItem);
+    updateQueueDisplay();
+    
+    // Limpar campos
+    productUrlInput.value = '';
+    affiliateUrlInput.value = '';
+    productUrlInput.focus();
+
+    showAlert('Produto adicionado à fila!', 'success');
+  });
+
+  // Importar do modo em massa
+  importFromBulkBtn.addEventListener('click', () => {
+    const urlsText = webhookUrlsTextarea.value.trim();
+    const lines = urlsText.split('\n').filter(line => line.trim() !== '');
+
+    if (lines.length === 0) {
+      showAlert('Nenhum link encontrado para importar', 'error');
+      return;
+    }
+
+    let imported = 0;
+    lines.forEach(line => {
+      const parts = line.split(',');
+      const productUrl = parts[0] ? parts[0].trim() : '';
+      const affiliateUrl = parts[1] ? parts[1].trim() : '';
+
+      if (productUrl && (productUrl.includes('mercadolivre.com') || productUrl.includes('mercadolibre.com'))) {
+        // Verificar se já existe
+        const exists = productQueue.some(item => item.productUrl === productUrl);
+        if (!exists) {
+          const queueItem = {
+            id: Date.now() + imported,
+            productUrl: productUrl,
+            affiliateUrl: affiliateUrl,
+            addedAt: new Date().toLocaleTimeString()
+          };
+          productQueue.push(queueItem);
+          imported++;
+        }
+      }
+    });
+
+    updateQueueDisplay();
+    
+    if (imported > 0) {
+      showAlert(`${imported} produtos importados para a fila!`, 'success');
+      // Mudar para modo visual
+      document.querySelector('[data-method="visual"]').click();
+    } else {
+      showAlert('Nenhum produto válido foi importado', 'warning');
+    }
+  });
+
+  // Limpar fila
+  clearQueueBtn.addEventListener('click', () => {
+    if (productQueue.length === 0) return;
+    
+    if (confirm('Deseja limpar toda a fila de produtos?')) {
+      productQueue = [];
+      updateQueueDisplay();
+      showAlert('Fila limpa!', 'info');
+    }
+  });
+
+  // Atualizar display da fila
+  function updateQueueDisplay() {
+    queueCount.textContent = `(${productQueue.length})`;
+    processCount.textContent = productQueue.length;
+
+    if (productQueue.length === 0) {
+      queueList.innerHTML = `
+        <div class="queue-empty">
+          <span class="empty-icon">📦</span>
+          <p>Nenhum produto na fila</p>
+          <small>Adicione produtos usando o formulário acima</small>
+        </div>
+      `;
+      return;
+    }
+
+    queueList.innerHTML = productQueue.map(item => `
+      <div class="queue-item" data-id="${item.id}">
+        <div class="queue-item-icon">🛒</div>
+        <div class="queue-item-content">
+          <div class="queue-item-title">
+            ${item.productUrl.length > 60 ? item.productUrl.substring(0, 60) + '...' : item.productUrl}
+          </div>
+          <div class="queue-item-subtitle">
+            ${item.affiliateUrl ? `Afiliado: ${item.affiliateUrl.length > 40 ? item.affiliateUrl.substring(0, 40) + '...' : item.affiliateUrl}` : 'Sem link de afiliado'} • ${item.addedAt}
+          </div>
+        </div>
+        <div class="queue-item-actions">
+          <button class="remove-item-btn" onclick="removeFromQueue(${item.id})">
+            🗑️ Remover
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Remover item da fila
+  window.removeFromQueue = function(id) {
+    productQueue = productQueue.filter(item => item.id !== id);
+    updateQueueDisplay();
+    showAlert('Produto removido da fila', 'info');
+  };
+
+  // Inicializar display
+  updateQueueDisplay();
 
   const filtroAgendamentoForm = document.getElementById(
     "filtroAgendamentoForm"
@@ -258,9 +461,11 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("tab-" + tabName).classList.add("active");
     element.classList.add("active");
 
+    // Esconder todas as seções incluindo loading
     resultsSection.style.display = "none";
     produtoSection.style.display = "none";
     webhookMessageSection.style.display = "none";
+    loading.style.display = "none";
 
     if (tabName === "agendamento") {
       loadAgendamentos();
@@ -379,12 +584,31 @@ document.addEventListener("DOMContentLoaded", function () {
   webhookForm.addEventListener("submit", async function (e) {
     e.preventDefault();
 
-    const urlsText = document.getElementById("webhookUrls").value.trim();
-    const lines = urlsText.split("\n").filter((line) => line.trim() !== "");
+    // Usar fila de produtos ou textarea como fallback
+    let itemsToProcess = [];
+    
+    if (productQueue.length > 0) {
+      itemsToProcess = productQueue.map(item => ({
+        productUrl: item.productUrl,
+        affiliateLink: item.affiliateUrl
+      }));
+    } else {
+      // Fallback para o modo massa
+      const urlsText = document.getElementById("webhookUrls").value.trim();
+      const lines = urlsText.split("\n").filter((line) => line.trim() !== "");
 
-    if (lines.length === 0) {
-      showAlert("Por favor, cole pelo menos um link de produto", "error");
-      return;
+      if (lines.length === 0) {
+        showAlert("Por favor, adicione produtos à fila ou cole links no modo massa", "error");
+        return;
+      }
+
+      itemsToProcess = lines.map(line => {
+        const parts = line.split(",");
+        return {
+          productUrl: parts[0] ? parts[0].trim() : "",
+          affiliateLink: parts[1] ? parts[1].trim() : ""
+        };
+      });
     }
 
     loading.style.display = "block";
@@ -394,15 +618,11 @@ document.addEventListener("DOMContentLoaded", function () {
     webhookMessageContent.innerHTML = "";
     webhookMessageSection.style.display = "block";
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const parts = line.split(",");
-
-      const productUrl = parts[0] ? parts[0].trim() : "";
-      const affiliateLink = parts[1] ? parts[1].trim() : "";
+    for (let i = 0; i < itemsToProcess.length; i++) {
+      const { productUrl, affiliateLink } = itemsToProcess[i];
 
       loading.querySelector("p").textContent = `Processando ${i + 1} de ${
-        lines.length
+        itemsToProcess.length
       }: ${productUrl.substring(0, 50)}...`;
 
       if (
@@ -410,7 +630,7 @@ document.addEventListener("DOMContentLoaded", function () {
         !productUrl.includes("mercadolibre.com")
       ) {
         displayWebhookMessage(
-          `Linha ${i + 1}: Link de produto inválido.`,
+          `Item ${i + 1}: Link de produto inválido.`,
           "error",
           null,
           true
@@ -473,48 +693,63 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
 
-    loading.querySelector("p").textContent =
-      "Processamento em lote finalizado!";
-    webhookBtn.disabled = false;
-  });
-
-    async function loadAgendamentos() {
-      const agendamentoList = document.getElementById("agendamento-list");
-      agendamentoList.innerHTML = "<p>Carregando produtos...</p>";
-
-      const status = document.getElementById("filtroStatus").value;
-      const ordem = document.getElementById("filtroOrdem").value;
-
-      let url = `/produtos?status=${status}&ordem=${ordem}&_t=${Date.now()}`;
-      if (status === "todos") {
-        url = `/produtos?status=todos&ordem=${ordem}&_t=${Date.now()}`;
-      }
-
-      try {
-        const response = await fetch(url, { method: "GET" });
-        const data = await response.json();
-
-        if (data.success && data.produtos.length > 0) {
-          agendamentoList.innerHTML = "";
-          data.produtos.forEach((produto) => {
-            const card = createAgendamentoCard(produto, status);
-            agendamentoList.appendChild(card);
-          });
-        } else {
-          agendamentoList.innerHTML =
-            "<p>Nenhum produto encontrado com os filtros selecionados.</p>";
-        }
-      } catch (error) {
-        console.error("Erro ao carregar agendamentos:", error);
-        agendamentoList.innerHTML =
-          "<p>Erro ao carregar a lista de produtos. Verifique o console.</p>";
-      }
+    // Limpar fila após processamento bem-sucedido
+    if (productQueue.length > 0) {
+      const processedCount = productQueue.length;
+      productQueue = [];
+      updateQueueDisplay();
+      showAlert(`✅ ${processedCount} produto${processedCount > 1 ? 's processados' : ' processado'} com sucesso!`, "success");
     }
 
-  filtroAgendamentoForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    loadAgendamentos();
+    loading.querySelector("p").textContent = "Processamento finalizado!";
+    webhookBtn.disabled = false;
+    
+    // Esconder loading automaticamente após 2 segundos
+    setTimeout(() => {
+      loading.style.display = "none";
+    }, 2000);
   });
+
+  async function loadAgendamentos() {
+    const agendamentoList = document.getElementById("agendamento-list");
+    agendamentoList.innerHTML = "<p>Carregando produtos...</p>";
+
+    const status = document.getElementById("filtroStatus").value;
+    const ordem = document.getElementById("filtroOrdem").value;
+
+    let url = `/produtos?status=${status}&ordem=${ordem}&_t=${Date.now()}`;
+    if (status === "todos") {
+      url = `/produtos?status=todos&ordem=${ordem}&_t=${Date.now()}`;
+    }
+
+    try {
+      const response = await fetch(url, { method: "GET" });
+      const data = await response.json();
+
+      if (data.success && data.produtos.length > 0) {
+        agendamentoList.innerHTML = "";
+        data.produtos.forEach((produto) => {
+          const card = createAgendamentoCard(produto, status);
+          agendamentoList.appendChild(card);
+        });
+      } else {
+        agendamentoList.innerHTML =
+          "<p>Nenhum produto encontrado com os filtros selecionados.</p>";
+      }
+    } catch (error) {
+      console.error("Erro ao carregar agendamentos:", error);
+      agendamentoList.innerHTML =
+        "<p>Erro ao carregar a lista de produtos. Verifique o console.</p>";
+    }
+  }
+
+  // Auto-aplicar filtros quando alterados
+  document
+    .getElementById("filtroStatus")
+    .addEventListener("change", loadAgendamentos);
+  document
+    .getElementById("filtroOrdem")
+    .addEventListener("change", loadAgendamentos);
 
   // ===== INÍCIO DA ALTERAÇÃO =====
   function createAgendamentoCard(produto, status) {
@@ -530,7 +765,6 @@ document.addEventListener("DOMContentLoaded", function () {
           <div class="agendamento-acoes">
               <button class="btn" onclick="openAgendamentoForm('${produto.id}')">Reagendar</button>
               <button class="btn" onclick="openEditarForm('${produto.id}')" style="background-color: #28a745;">Editar</button>
-              <button class="btn" onclick="enviarProdutoAgendado('${produto.id}')" style="background-color: #007bff;">Enviar</button>
               <button class="btn-excluir" onclick="deletarAgendamento('${produto.id}', this)">Excluir</button>
           </div>
       `;
@@ -540,7 +774,6 @@ document.addEventListener("DOMContentLoaded", function () {
           <div class="agendamento-acoes">
               <button class="btn" onclick="openAgendamentoForm('${produto.id}')">Agendar</button>
               <button class="btn" onclick="openEditarForm('${produto.id}')" style="background-color: #28a745;">Editar</button>
-              <button class="btn" onclick="enviarProdutoAgendado('${produto.id}')" style="background-color: #007bff;">Enviar</button>
               <button class="btn-excluir" onclick="deletarAgendamento('${produto.id}', this)">Excluir</button>
           </div>
       `;
@@ -916,17 +1149,53 @@ document.addEventListener("DOMContentLoaded", function () {
   window.copyToClipboard = copyToClipboard;
 
   function showAlert(message, type) {
-    const existing = document.querySelector(".alert");
-    if (existing) existing.remove();
+    // Remove alerts existentes
+    const existing = document.querySelectorAll(".alert");
+    existing.forEach(alert => alert.remove());
 
     const alert = document.createElement("div");
     alert.className = `alert alert-${type}`;
     alert.textContent = message;
+    alert.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 10000;
+      max-width: 400px;
+      opacity: 0;
+      transform: translateX(100%);
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    `;
 
-    loading.parentNode.insertBefore(alert, loading);
+    document.body.appendChild(alert);
 
+    // Mostrar com animação
     setTimeout(() => {
-      alert.remove();
-    }, 5000);
+      alert.style.opacity = '1';
+      alert.style.transform = 'translateX(0)';
+    }, 10);
+
+    // Remover automaticamente após 4 segundos
+    setTimeout(() => {
+      alert.style.opacity = '0';
+      alert.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (alert.parentNode) {
+          alert.remove();
+        }
+      }, 300);
+    }, 4000);
+
+    // Permitir fechar clicando
+    alert.addEventListener('click', () => {
+      alert.style.opacity = '0';
+      alert.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (alert.parentNode) {
+          alert.remove();
+        }
+      }, 300);
+    });
   }
 });
