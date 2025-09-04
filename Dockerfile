@@ -28,7 +28,7 @@ EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/ || exit 1
+  CMD curl -f http://localhost:5000/teste || exit 1
 
 # Run the application
 CMD ["python", "run.py"]

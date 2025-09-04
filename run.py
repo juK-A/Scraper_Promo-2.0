@@ -1,10 +1,26 @@
 # /mercado_livre_scraper/run.py
 
+import os
+import sys
 from app import create_app
 
-app = create_app()
+print("Starting Mercado Livre Scraper...", file=sys.stderr)
+
+try:
+    app = create_app()
+    print("Flask app created successfully!", file=sys.stderr)
+except Exception as e:
+    print(f"Error creating Flask app: {e}", file=sys.stderr)
+    sys.exit(1)
 
 if __name__ == '__main__':
-    import os
     debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
-    app.run(host='0.0.0.0', debug=debug_mode, port=5000)
+    port = int(os.getenv('PORT', 5000))
+    
+    print(f"Starting server on 0.0.0.0:{port}, debug={debug_mode}", file=sys.stderr)
+    
+    try:
+        app.run(host='0.0.0.0', debug=debug_mode, port=port)
+    except Exception as e:
+        print(f"Error starting server: {e}", file=sys.stderr)
+        sys.exit(1)
