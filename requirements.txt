@@ -1,9 +1,7 @@
-# /mercado_livre_scraper/requirements.txt
-
-Flask
-requests
-beautifulsoup4
-supabase
-pytz
-Pillow
-python-dotenv
+Flask>=2.3.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+supabase>=1.0.0
+pytz>=2023.3
+Pillow>=10.0.0
+python-dotenv>=1.0.0
