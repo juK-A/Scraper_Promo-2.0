@@ -1549,3 +1549,24 @@ body {
 .dark-mode .config-section input[type="text"]:focus {
   border-color: #3498db !important;
 }
+
+.dark-mode .config-section select {
+  background: #404040 !important;
+  border-color: #555 !important;
+  color: #e0e0e0 !important;
+}
+
+.dark-mode .config-section select:focus {
+  border-color: #3498db !important;
+}
+
+.dark-mode #bucketAtualInfo {
+  background-color: #404040 !important;
+  border-color: #555 !important;
+  color: #e0e0e0 !important;
+}
+
+.dark-mode #modalBucketAtivo {
+  background: #404040 !important;
+  color: #e0e0e0 !important;
+}

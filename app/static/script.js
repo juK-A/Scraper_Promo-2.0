@@ -1606,10 +1606,16 @@ document.addEventListener("DOMContentLoaded", function () {
   window.abrirSeletorImagens = function() {
     document.getElementById("seletorImagensModal").style.display = "block";
     
+    // Atualizar o indicador do bucket ativo no modal
+    const modalBucketAtivo = document.getElementById("modalBucketAtivo");
+    if (modalBucketAtivo) {
+      modalBucketAtivo.textContent = bucketAtual;
+    }
+    
     // Atualizar o select com o bucket configurado
     const bucketSelect = document.getElementById("bucketSelect");
     if (bucketSelect) {
-      bucketSelect.innerHTML = `<option value="${bucketAtual}">📁 ${bucketAtual}</option>`;
+      bucketSelect.value = bucketAtual;
     }
     
     // Carregar imagens automaticamente ao abrir
@@ -1748,9 +1754,30 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Função para trocar bucket
   window.trocarBucket = function() {
-    bucketAtual = document.getElementById("bucketSelect").value;
+    const novoBucket = document.getElementById("bucketSelect").value;
+    bucketAtual = novoBucket;
+    
+    // Salvar no localStorage para persistir a escolha
+    localStorage.setItem('supabase_bucket_name', novoBucket);
+    
+    // Atualizar indicador no modal
+    const modalBucketAtivo = document.getElementById("modalBucketAtivo");
+    if (modalBucketAtivo) {
+      modalBucketAtivo.textContent = novoBucket;
+    }
+    
+    // Atualizar nas configurações se estiver aberto
+    const bucketSelector = document.getElementById("bucketSelector");
+    const bucketInfo = document.getElementById("bucketAtualInfo");
+    if (bucketSelector) bucketSelector.value = novoBucket;
+    if (bucketInfo) bucketInfo.textContent = novoBucket;
+    
+    // Limpar busca e recarregar imagens
     termoBusca = '';
-    document.getElementById("searchImagens").value = '';
+    const searchInput = document.getElementById("searchImagens");
+    if (searchInput) searchInput.value = '';
+    
+    console.log(`🔄 Bucket alterado via modal para: ${novoBucket}`);
     carregarImagens(true);
   };
 
@@ -1810,10 +1837,12 @@ function carregarConfiguracoes() {
   const supabaseUrl = localStorage.getItem('supabase_url') || '';
   
   // Verificar se os elementos existem antes de definir valores
-  const bucketInput = document.getElementById('bucketName');
+  const bucketSelector = document.getElementById('bucketSelector');
+  const bucketInfo = document.getElementById('bucketAtualInfo');
   const urlInput = document.getElementById('supabaseUrl');
   
-  if (bucketInput) bucketInput.value = bucketName;
+  if (bucketSelector) bucketSelector.value = bucketName;
+  if (bucketInfo) bucketInfo.textContent = bucketName;
   if (urlInput) urlInput.value = supabaseUrl;
   
   // Atualizar a variável do bucket atual se existir
@@ -1822,14 +1851,42 @@ function carregarConfiguracoes() {
   }
 }
 
+// Função para trocar bucket via configurações
+function trocarBucketConfig() {
+  const bucketSelector = document.getElementById('bucketSelector');
+  const bucketInfo = document.getElementById('bucketAtualInfo');
+  
+  if (bucketSelector) {
+    const novoBucket = bucketSelector.value;
+    
+    // Salvar no localStorage
+    localStorage.setItem('supabase_bucket_name', novoBucket);
+    
+    // Atualizar interface
+    if (bucketInfo) bucketInfo.textContent = novoBucket;
+    
+    // Atualizar variável global
+    if (typeof bucketAtual !== 'undefined') {
+      bucketAtual = novoBucket;
+      console.log(`🔄 Bucket alterado para: ${novoBucket}`);
+    }
+    
+    // Mostrar feedback
+    mostrarStatusConfig(`✅ Bucket alterado para: ${novoBucket}`, 'success');
+    
+    // Se houver imagens carregadas, limpar para forçar recarregamento
+    const grid = document.getElementById("imagensGrid");
+    if (grid && grid.innerHTML.includes('imagem-item')) {
+      grid.innerHTML = `<p style="text-align: center; color: #666;">📷 Clique em "Atualizar" para carregar imagens do novo bucket</p>`;
+    }
+  }
+}
+
 function salvarConfiguracoes() {
-  const bucketName = document.getElementById('bucketName').value.trim();
+  const bucketSelector = document.getElementById('bucketSelector');
   const supabaseUrl = document.getElementById('supabaseUrl').value.trim();
   
-  if (!bucketName) {
-    mostrarStatusConfig('❌ Nome do bucket é obrigatório!', 'error');
-    return;
-  }
+  const bucketName = bucketSelector ? bucketSelector.value : 'imagens_melhoradas_tech';
   
   // Salvar no localStorage
   localStorage.setItem('supabase_bucket_name', bucketName);
@@ -1840,12 +1897,17 @@ function salvarConfiguracoes() {
     bucketAtual = bucketName;
   }
   
+  // Atualizar info visual
+  const bucketInfo = document.getElementById('bucketAtualInfo');
+  if (bucketInfo) bucketInfo.textContent = bucketName;
+  
   // Salvar no servidor (opcional - pode implementar endpoint para salvar no .env)
   mostrarStatusConfig('✅ Configurações salvas com sucesso!', 'success');
 }
 
 async function testarConexao() {
-  const bucketName = document.getElementById('bucketName').value.trim();
+  const bucketSelector = document.getElementById('bucketSelector');
+  const bucketName = bucketSelector ? bucketSelector.value : bucketAtual;
   
   if (!bucketName) {
     mostrarStatusConfig('❌ Nome do bucket é obrigatório para testar a conexão!', 'error');

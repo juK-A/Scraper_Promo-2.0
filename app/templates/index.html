@@ -256,17 +256,41 @@
             <div class="config-section">
               <h4>📁 Supabase Storage</h4>
               <div class="form-group">
-                <label for="bucketName">Nome do Bucket:</label>
-                <input 
-                  type="text" 
-                  id="bucketName" 
-                  placeholder="ex: imagens_melhoradas_tech"
-                  value=""
-                  style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;"
-                />
+                <label for="bucketSelector">Selecionar Bucket:</label>
+                <select 
+                  id="bucketSelector" 
+                  onchange="trocarBucketConfig()"
+                  style="
+                    width: 100%; 
+                    padding: 12px; 
+                    border: 1px solid #ddd; 
+                    border-radius: 8px; 
+                    font-size: 14px;
+                    background: white;
+                    cursor: pointer;
+                  "
+                >
+                  <option value="imagens_melhoradas_tech">🎨 imagens_melhoradas_tech (Principal)</option>
+                  <option value="imagens_melhorada">📷 imagens_melhorada (Alternativo)</option>
+                </select>
                 <small style="color: #666; margin-top: 5px; display: block;">
-                  📝 Este é o nome do bucket no seu Supabase Storage onde as imagens são armazenadas
+                  📝 Escolha qual bucket usar para carregar as imagens
                 </small>
+              </div>
+              
+              <div class="form-group">
+                <label>Bucket Atual:</label>
+                <div id="bucketAtualInfo" style="
+                  padding: 10px;
+                  background-color: #f8f9fa;
+                  border: 1px solid #e1e8ed;
+                  border-radius: 6px;
+                  font-family: monospace;
+                  color: #333;
+                  font-size: 13px;
+                ">
+                  imagens_melhoradas_tech
+                </div>
               </div>
               
               <div class="form-group">
@@ -647,6 +671,9 @@
       <div class="modal-content" style="max-width: 900px;">
         <div class="modal-header">
           <h2>📁 Selecionar Imagem do Bucket</h2>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">
+            🎯 Bucket ativo: <span id="modalBucketAtivo" style="font-family: monospace; background: #f0f0f0; padding: 2px 6px; border-radius: 4px;">carregando...</span>
+          </div>
           <span class="close" onclick="fecharSeletorImagens()">&times;</span>
         </div>
         <div class="modal-body">
@@ -681,7 +708,8 @@
                   "
                   onchange="trocarBucket()"
                 >
-                  <option value="imagens_melhoradas_tech">📁 imagens_melhoradas_tech</option>
+                  <option value="imagens_melhoradas_tech">🎨 imagens_melhoradas_tech</option>
+                  <option value="imagens_melhorada">📷 imagens_melhorada</option>
                 </select>
               </div>
               <button
