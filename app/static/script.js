@@ -1,5 +1,106 @@
 // /mercado_livre_scraper/app/static/script.js
 
+// Inicializar Supabase Client
+let supabaseClient = null;
+let supabaseInitialized = false;
+
+// Função para inicializar o Supabase Client
+function initializeSupabase() {
+  try {
+    const supabaseUrl = localStorage.getItem('supabase_url') || 'https://cfacybymuscwcpgmbjkz.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmYWN5YnltdXNjd2NwZ21iamt6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTk1MzY4MSwiZXhwIjoyMDcxNTI5NjgxfQ.6IWnYtV1u0PpUVp72HPbKzel2VTuoLzVEz6IJuuThvs';
+    
+    if (typeof supabase !== 'undefined') {
+      supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+      supabaseInitialized = true;
+      console.log('✅ Supabase Client inicializado com sucesso');
+    } else {
+      console.warn('⚠️ Supabase JS não foi carregado');
+    }
+  } catch (error) {
+    console.error('❌ Erro ao inicializar Supabase Client:', error);
+  }
+}
+
+// Função para fazer download direto de imagens via Supabase JS
+async function downloadImageDirect(filePath, bucketName = null) {
+  if (!supabaseInitialized || !supabaseClient) {
+    console.log('📡 Fallback: usando API tradicional para imagem');
+    return null;
+  }
+
+  try {
+    const bucket = bucketName || bucketAtual;
+    console.log(`🔄 Baixando imagem via Supabase JS: ${filePath} do bucket ${bucket}`);
+    
+    const { data, error } = await supabaseClient.storage
+      .from(bucket)
+      .download(filePath);
+    
+    if (error) {
+      console.error('❌ Erro no download direto:', error.message);
+      return null;
+    }
+
+    // Criar URL do objeto para exibição
+    const url = URL.createObjectURL(data);
+    console.log('✅ Imagem baixada via Supabase JS:', filePath);
+    return url;
+    
+  } catch (error) {
+    console.error('❌ Erro ao baixar imagem diretamente:', error.message);
+    return null;
+  }
+}
+
+// Função para listar imagens via Supabase JS (alternativa à API)
+async function listImagesDirect(bucketName = null, path = '', limit = 20, offset = 0) {
+  if (!supabaseInitialized || !supabaseClient) {
+    return null;
+  }
+
+  try {
+    const bucket = bucketName || bucketAtual;
+    console.log(`🔍 Listando imagens via Supabase JS do bucket: ${bucket}`);
+    
+    const { data, error } = await supabaseClient.storage
+      .from(bucket)
+      .list(path, {
+        limit: limit,
+        offset: offset,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+    
+    if (error) {
+      console.error('❌ Erro ao listar imagens:', error.message);
+      return null;
+    }
+
+    // Converter para o formato esperado pela aplicação
+    const imagens = data
+      .filter(file => file.name && !file.name.endsWith('/'))
+      .map(file => {
+        const publicUrl = supabaseClient.storage
+          .from(bucket)
+          .getPublicUrl(path + file.name);
+        
+        return {
+          nome: file.name,
+          url: publicUrl.data.publicUrl,
+          tamanho: file.metadata?.size || 0,
+          caminho: path + file.name
+        };
+      });
+
+    console.log(`✅ ${imagens.length} imagens listadas via Supabase JS`);
+    return imagens;
+    
+  } catch (error) {
+    console.error('❌ Erro ao listar imagens via Supabase JS:', error.message);
+    return null;
+  }
+}
+
 // Funções no escopo global para o HTML poder acessá-las
 window.openAgendamentoForm = function (produtoId) {
   document.getElementById("agendarProdutoId").value = produtoId;
@@ -16,6 +117,15 @@ window.openEditarForm = function (produtoId) {
   // Limpar os campos
   document.getElementById("editarImagemUrl").value = "";
   document.getElementById("editarMensagem").value = "";
+  
+  // Limpar campos do cupom
+  document.getElementById("cupomTexto").value = "";
+  document.getElementById("cupomValor").value = "";
+  document.getElementById("cupomLinkAfiliado").value = "";
+  document.getElementById("cupomPreview").style.display = "none";
+  // Reset tipo para porcentagem
+  document.getElementById("cupomTipo").value = "porcentagem";
+  alterarTipoCupom();
 
   // Resetar preview
   updateImagePreview();
@@ -26,6 +136,10 @@ window.openEditarForm = function (produtoId) {
     .then((data) => {
       if (data.success) {
         const produto = data.produto;
+        
+        // Armazenar dados do produto na variável global
+        produtoAtualData = produto;
+        
         document.getElementById("editarImagemUrl").value =
           produto.imagem_url || "";
         document.getElementById("editarMensagem").value =
@@ -37,6 +151,7 @@ window.openEditarForm = function (produtoId) {
     })
     .catch((error) => {
       console.error("Erro ao carregar dados do produto:", error);
+      produtoAtualData = null;
     });
 
   document.getElementById("editarModal").style.display = "block";
@@ -44,6 +159,9 @@ window.openEditarForm = function (produtoId) {
 
 window.closeEditModal = function () {
   document.getElementById("editarModal").style.display = "none";
+  
+  // Limpar dados globais do produto
+  produtoAtualData = null;
 };
 
 window.enviarProdutoAgendado = async function (produtoId) {
@@ -152,6 +270,237 @@ window.updateImagePreview = function () {
   }
 };
 
+// Variáveis globais para dados do produto atual
+let produtoAtualData = null;
+
+// Função para alterar tipo de cupom
+window.alterarTipoCupom = function () {
+  const cupomTipo = document.getElementById("cupomTipo").value;
+  const cupomValorLabel = document.getElementById("cupomValorLabel");
+  const cupomValorInput = document.getElementById("cupomValor");
+
+  if (cupomTipo === "porcentagem") {
+    cupomValorLabel.textContent = "Desconto (%)";
+    cupomValorInput.placeholder = "10";
+    cupomValorInput.max = "99";
+    cupomValorInput.step = "1";
+  } else {
+    cupomValorLabel.textContent = "Desconto (R$)";
+    cupomValorInput.placeholder = "60.00";
+    cupomValorInput.removeAttribute("max");
+    cupomValorInput.step = "0.01";
+  }
+  
+  // Limpar o valor atual quando trocar tipo
+  cupomValorInput.value = "";
+};
+
+// Função para calcular e mostrar preview do desconto
+window.calcularDesconto = function () {
+  const cupomTexto = document.getElementById("cupomTexto").value.trim();
+  const cupomTipo = document.getElementById("cupomTipo").value;
+  const cupomValor = parseFloat(document.getElementById("cupomValor").value);
+  const cupomPreview = document.getElementById("cupomPreview");
+  const cupomInfo = document.getElementById("cupomInfo");
+
+  if (!cupomTexto || !cupomValor || cupomValor <= 0) {
+    cupomPreview.style.display = "none";
+    return;
+  }
+
+  // Validações específicas por tipo
+  if (cupomTipo === "porcentagem" && (cupomValor < 1 || cupomValor > 99)) {
+    cupomPreview.style.display = "none";
+    return;
+  }
+
+  if (produtoAtualData && produtoAtualData.preco_atual) {
+    // Extrair valor numérico do preço
+    const precoOriginal = extrairValorNumerico(produtoAtualData.preco_atual);
+    if (precoOriginal > 0) {
+      let desconto, novoPreco, cupomDescricao;
+      
+      if (cupomTipo === "porcentagem") {
+        desconto = (precoOriginal * cupomValor) / 100;
+        cupomDescricao = `${cupomTexto} (-${cupomValor}%)`;
+      } else {
+        desconto = cupomValor;
+        cupomDescricao = `${cupomTexto} (-R$ ${cupomValor.toFixed(2).replace('.', ',')})`;
+      }
+      
+      novoPreco = Math.max(0, precoOriginal - desconto); // Não pode ser negativo
+      
+      cupomInfo.innerHTML = `
+        <div style="display: grid; grid-template-columns: auto auto; gap: 12px; align-items: center;">
+          <span>💰 Preço Original:</span>
+          <span style="font-weight: 500;">R$ ${precoOriginal.toFixed(2).replace('.', ',')}</span>
+          
+          <span>🎟️ Cupom:</span>
+          <span style="font-weight: 500; color: #ff6b6b;">${cupomDescricao}</span>
+          
+          <span>💸 Desconto:</span>
+          <span style="font-weight: 500; color: #28a745;">-R$ ${desconto.toFixed(2).replace('.', ',')}</span>
+          
+          <span>🏷️ <strong>Preço Final:</strong></span>
+          <span style="font-weight: 700; color: #007bff; font-size: 16px;">R$ ${novoPreco.toFixed(2).replace('.', ',')}</span>
+        </div>
+      `;
+      cupomPreview.style.display = "block";
+    } else {
+      cupomPreview.style.display = "none";
+    }
+  } else {
+    cupomInfo.innerHTML = `
+      <div style="color: #666; font-style: italic;">
+        ℹ️ Preview será calculado com base no preço do produto
+      </div>
+    `;
+    cupomPreview.style.display = "block";
+  }
+};
+
+// Função para aplicar cupom à mensagem
+window.aplicarCupom = function () {
+  const cupomTexto = document.getElementById("cupomTexto").value.trim();
+  const cupomTipo = document.getElementById("cupomTipo").value;
+  const cupomValor = parseFloat(document.getElementById("cupomValor").value);
+  const cupomLinkAfiliado = document.getElementById("cupomLinkAfiliado").value.trim();
+  const mensagemTextarea = document.getElementById("editarMensagem");
+
+  if (!cupomTexto || !cupomValor || cupomValor <= 0) {
+    showAlert("Por favor, preencha o texto do cupom e um valor válido", "error");
+    return;
+  }
+
+  // Validações específicas por tipo
+  if (cupomTipo === "porcentagem" && (cupomValor < 1 || cupomValor > 99)) {
+    showAlert("Porcentagem deve estar entre 1% e 99%", "error");
+    return;
+  }
+
+  if (!produtoAtualData) {
+    showAlert("Erro: dados do produto não encontrados", "error");
+    return;
+  }
+
+  // Calcular novo preço
+  const precoOriginal = extrairValorNumerico(produtoAtualData.preco_atual);
+  if (precoOriginal <= 0) {
+    showAlert("Erro: não foi possível extrair o preço do produto", "error");
+    return;
+  }
+
+  let desconto, novoPreco;
+  if (cupomTipo === "porcentagem") {
+    desconto = (precoOriginal * cupomValor) / 100;
+  } else {
+    desconto = cupomValor;
+  }
+  
+  novoPreco = Math.max(0, precoOriginal - desconto);
+  const novoPrecoFormatado = `R$ ${novoPreco.toFixed(2).replace('.', ',')}`;
+
+  // Construir nova mensagem com cupom (incluindo link de afiliado)
+  const mensagemComCupom = construirMensagemComCupom(produtoAtualData, cupomTexto, cupomTipo, cupomValor, precoOriginal, novoPreco, desconto, cupomLinkAfiliado);
+  
+  // Atualizar textarea
+  mensagemTextarea.value = mensagemComCupom;
+  
+  // Armazenar dados do cupom aplicado para quando salvar
+  produtoAtualData.cupom_aplicado = {
+    texto: cupomTexto,
+    tipo: cupomTipo,
+    valor: cupomValor,
+    preco_original: produtoAtualData.preco_atual,
+    preco_novo: novoPrecoFormatado,
+    desconto: desconto,
+    link_afiliado: cupomLinkAfiliado
+  };
+  
+  // Limpar campos do cupom
+  document.getElementById("cupomTexto").value = "";
+  document.getElementById("cupomValor").value = "";
+  document.getElementById("cupomLinkAfiliado").value = "";
+  document.getElementById("cupomPreview").style.display = "none";
+  // Reset tipo para porcentagem
+  document.getElementById("cupomTipo").value = "porcentagem";
+  alterarTipoCupom();
+
+  const tipoDescricao = cupomTipo === "porcentagem" ? `${cupomValor}%` : `R$ ${cupomValor.toFixed(2).replace('.', ',')}`;
+  showAlert(`🎉 Cupom ${cupomTexto} (${tipoDescricao}) aplicado! Preço atualizado para ${novoPrecoFormatado}. Salve as alterações para confirmar.`, "success");
+};
+
+// Função auxiliar para extrair valor numérico do preço
+function extrairValorNumerico(precoTexto) {
+  if (!precoTexto) return 0;
+  
+  // Remove "R$", espaços e outros caracteres não numéricos, exceto vírgulas e pontos
+  const numeroLimpo = precoTexto.toString()
+    .replace(/R\$/g, '')
+    .replace(/\s/g, '')
+    .replace(/[^\d,.]/g, ''); // Remove tudo exceto dígitos, vírgula e ponto
+  
+  // Se tem ponto seguido de vírgula (ex: 1.234,56), trata como milhares e centavos
+  if (numeroLimpo.includes('.') && numeroLimpo.includes(',')) {
+    const valor = parseFloat(numeroLimpo.replace(/\./g, '').replace(',', '.'));
+    return isNaN(valor) ? 0 : valor;
+  }
+  
+  // Se tem apenas vírgula, substitui por ponto para decimal
+  if (numeroLimpo.includes(',') && !numeroLimpo.includes('.')) {
+    const valor = parseFloat(numeroLimpo.replace(',', '.'));
+    return isNaN(valor) ? 0 : valor;
+  }
+  
+  // Se tem apenas ponto, verifica se é decimal ou milhares
+  if (numeroLimpo.includes('.')) {
+    const partes = numeroLimpo.split('.');
+    if (partes.length === 2 && partes[1].length <= 2) {
+      // É decimal (ex: 123.45)
+      const valor = parseFloat(numeroLimpo);
+      return isNaN(valor) ? 0 : valor;
+    } else {
+      // É milhares (ex: 1.234)
+      const valor = parseFloat(numeroLimpo.replace(/\./g, ''));
+      return isNaN(valor) ? 0 : valor;
+    }
+  }
+  
+  // Se não tem ponto nem vírgula, é um número inteiro
+  const valor = parseFloat(numeroLimpo);
+  return isNaN(valor) ? 0 : valor;
+}
+
+// Função para construir mensagem com cupom
+function construirMensagemComCupom(produto, cupomTexto, cupomTipo, cupomValor, precoOriginal, novoPreco, desconto, linkAfiliado) {
+  // PRIORIZAR LINK DE AFILIADO FORNECIDO PELO USUÁRIO
+  const linkProduto = linkAfiliado || produto.afiliado_link || produto.link_produto || produto.link || 'Link não disponível';
+  
+  // Construir descrição do desconto baseado no tipo
+  let descontoDescricao;
+  if (cupomTipo === "porcentagem") {
+    descontoDescricao = `🔥 *${cupomValor}% DE DESCONTO*`;
+  } else {
+    descontoDescricao = `🔥 *R$ ${cupomValor.toFixed(2).replace('.', ',')} DE DESCONTO*`;
+  }
+  
+  return `🛒 *${produto.titulo}*
+
+💰 ~~R$ ${precoOriginal.toFixed(2).replace('.', ',')}~~
+
+🎟️ *CUPOM: ${cupomTexto}*
+${descontoDescricao}
+
+💸 *PREÇO COM CUPOM: R$ ${novoPreco.toFixed(2).replace('.', ',')}*
+
+✨ Economize R$ ${desconto.toFixed(2).replace('.', ',')}!
+
+🛒 Link: ${linkProduto}
+
+⚡ Oferta por tempo limitado!
+🎯 Use o cupom: *${cupomTexto}*`;
+}
+
 function isValidImageUrl(url) {
   try {
     new URL(url);
@@ -210,6 +559,10 @@ window.deletarAgendamento = async function (produtoId, buttonElement) {
 // ===== FIM DA ALTERAÇÃO =====
 
 document.addEventListener("DOMContentLoaded", function () {
+  // Inicializar Supabase Client
+  console.log('🚀 Inicializando Supabase Client...');
+  initializeSupabase();
+  
   // Configuração do modo escuro
   const themeToggle = document.getElementById("themeToggle");
   const savedTheme = localStorage.getItem("theme") || "light";
@@ -786,12 +1139,37 @@ document.addEventListener("DOMContentLoaded", function () {
       ? `${imagemParaUsar}?t=${Date.now()}`
       : "";
 
+    // Verificar se tem cupom aplicado para mostrar preços diferentes
+    let precoHtml = `<div class="product-price-atual">${produto.preco_atual}</div>`;
+    
+    if (produto.preco_com_cupom && produto.cupom_info) {
+      // Construir descrição do cupom baseado no tipo
+      let cupomDescricao;
+      if (produto.cupom_info.tipo === "porcentagem") {
+        cupomDescricao = `🎟️ ${produto.cupom_info.texto} (-${produto.cupom_info.valor}%)`;
+      } else {
+        cupomDescricao = `🎟️ ${produto.cupom_info.texto} (-R$ ${produto.cupom_info.valor.toFixed(2).replace('.', ',')})`;
+      }
+      
+      precoHtml = `
+        <div class="product-price-original" style="text-decoration: line-through; color: #999; font-size: 0.9rem;">
+          ${produto.cupom_info.preco_original || produto.preco_atual}
+        </div>
+        <div class="product-price-atual" style="color: #e74c3c; font-weight: bold;">
+          ${produto.preco_com_cupom}
+        </div>
+        <div class="product-cupom">
+          ${cupomDescricao}
+        </div>
+      `;
+    }
+
     card.innerHTML = `
         <div class="product-header">
           <img src="${imagemComCache}" alt="${produto.titulo}" class="product-image">
           <div class="product-info">
             <div class="product-title">${produto.titulo}</div>
-            <div class="product-price-atual">${produto.preco_atual}</div>
+            ${precoHtml}
           </div>
         </div>
         <p>${dataInfo}</p>
@@ -865,6 +1243,16 @@ document.addEventListener("DOMContentLoaded", function () {
         const dadosEdicao = {};
         if (imagemUrl) dadosEdicao.imagem_url = imagemUrl;
         if (mensagem) dadosEdicao.final_message = mensagem;
+        
+        // Se tem cupom aplicado, enviar também o novo preço
+        if (produtoAtualData && produtoAtualData.cupom_aplicado) {
+          dadosEdicao.preco_com_cupom = produtoAtualData.cupom_aplicado.preco_novo;
+          dadosEdicao.cupom_info = {
+            texto: produtoAtualData.cupom_aplicado.texto,
+            porcentagem: produtoAtualData.cupom_aplicado.porcentagem,
+            preco_original: produtoAtualData.cupom_aplicado.preco_original
+          };
+        }
 
         const response = await fetch(`/produtos/${produtoId}`, {
           method: "PUT",
@@ -874,7 +1262,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const data = await response.json();
         if (response.ok) {
-          showAlert(data.message, "success");
+          let mensagemSucesso = data.message;
+          if (produtoAtualData && produtoAtualData.cupom_aplicado) {
+            mensagemSucesso += ` Cupom ${produtoAtualData.cupom_aplicado.texto} aplicado!`;
+          }
+          showAlert(mensagemSucesso, "success");
+          
           // Força a recarga da lista com um pequeno delay para garantir que o servidor processou
           setTimeout(() => {
             loadAgendamentos();
@@ -1198,4 +1591,329 @@ document.addEventListener("DOMContentLoaded", function () {
       }, 300);
     });
   }
+
+  // ===== FUNÇÕES PARA SELETOR DE IMAGENS DO SUPABASE STORAGE =====
+
+  // Variáveis para controle do seletor de imagens
+  let paginaAtual = 0;
+  let imagensPorPagina = 20;
+  let termoBusca = '';
+  let bucketAtual = localStorage.getItem('supabase_bucket_name') || 'imagens_melhoradas_tech';
+  let imagensCarregadas = [];
+  let imagemSelecionada = null;
+
+  // Função para abrir o seletor de imagens
+  window.abrirSeletorImagens = function() {
+    document.getElementById("seletorImagensModal").style.display = "block";
+    
+    // Atualizar o select com o bucket configurado
+    const bucketSelect = document.getElementById("bucketSelect");
+    if (bucketSelect) {
+      bucketSelect.innerHTML = `<option value="${bucketAtual}">📁 ${bucketAtual}</option>`;
+    }
+    
+    // Carregar imagens automaticamente ao abrir
+    carregarImagens();
+  };
+
+  // Função para fechar o seletor de imagens
+  window.fecharSeletorImagens = function() {
+    document.getElementById("seletorImagensModal").style.display = "none";
+    imagemSelecionada = null;
+    limparSelecaoImagens();
+  };
+
+  // Função para carregar imagens do bucket
+  window.carregarImagens = async function(resetarPagina = true) {
+    if (resetarPagina) paginaAtual = 0;
+    
+    const loading = document.getElementById("loadingImagens");
+    const grid = document.getElementById("imagensGrid");
+    
+    loading.style.display = "block";
+    
+    try {
+      // Tentar primeiro com Supabase JS Client
+      let imagens = null;
+      
+      if (supabaseInitialized && termoBusca === '') { // Supabase JS não suporta busca avançada
+        console.log('🚀 Tentando carregar imagens via Supabase JS Client');
+        imagens = await listImagesDirect(bucketAtual, '', imagensPorPagina, paginaAtual * imagensPorPagina);
+      }
+      
+      // Fallback para API tradicional se Supabase JS falhar ou houver busca
+      if (!imagens) {
+        const url = `/storage/imagens?bucket=${bucketAtual}&limit=${imagensPorPagina}&offset=${paginaAtual * imagensPorPagina}&search=${encodeURIComponent(termoBusca)}`;
+        console.log('📡 Fallback: fazendo requisição para API:', url);
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        console.log('Resposta da API:', data);
+        
+        if (data.success) {
+          imagens = data.imagens;
+        } else {
+          grid.innerHTML = `<p style="text-align: center; color: #e74c3c;">❌ Erro: ${data.error}</p>`;
+          return;
+        }
+      }
+      
+      if (imagens) {
+        imagensCarregadas = imagens;
+        exibirImagens(imagens);
+        atualizarPaginacao(imagens.length);
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar imagens:', error);
+      grid.innerHTML = `<p style="text-align: center; color: #e74c3c;">❌ Erro de conexão: ${error.message}</p>`;
+    } finally {
+      loading.style.display = "none";
+    }
+  };
+
+  // Função para exibir as imagens no grid
+  function exibirImagens(imagens) {
+    const grid = document.getElementById("imagensGrid");
+    
+    if (imagens.length === 0) {
+      grid.innerHTML = `<p style="text-align: center; color: #666; grid-column: 1/-1;">📷 Nenhuma imagem encontrada</p>`;
+      return;
+    }
+    
+    grid.innerHTML = imagens.map((imagem, index) => `
+      <div class="imagem-item" onclick="selecionarImagem('${imagem.url}', '${imagem.nome}', this)">
+        <img id="img-${index}" src="${imagem.url}" alt="${imagem.nome}" 
+             onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❌</text></svg>'"
+             onload="onImageLoad(this, '${imagem.caminho || imagem.nome}', ${index})">
+        <div class="imagem-info">
+          <div class="imagem-nome" title="${imagem.nome}">${imagem.nome}</div>
+          <div class="imagem-tamanho">${formatarTamanho(imagem.tamanho)}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Função chamada quando uma imagem é carregada (para otimização opcional)
+  window.onImageLoad = async function(imgElement, imagePath, index) {
+    // Se a imagem falhou ao carregar via URL pública, tentar download direto
+    if (imgElement.naturalWidth === 0 && supabaseInitialized) {
+      console.log(`🔄 Tentando download direto para: ${imagePath}`);
+      
+      const directUrl = await downloadImageDirect(imagePath, bucketAtual);
+      if (directUrl) {
+        imgElement.src = directUrl;
+        console.log(`✅ Imagem carregada via download direto: ${imagePath}`);
+      }
+    }
+  };
+
+  // Função para selecionar uma imagem
+  window.selecionarImagem = function(url, nome, elemento) {
+    // Remover seleção anterior
+    limparSelecaoImagens();
+    
+    // Adicionar seleção atual
+    elemento.classList.add('selected');
+    imagemSelecionada = { url, nome };
+    
+    // Aplicar imagem selecionada ao campo de edição
+    document.getElementById("editarImagemUrl").value = url;
+    updateImagePreview();
+    
+    // Fechar modal
+    setTimeout(() => {
+      fecharSeletorImagens();
+      showAlert(`✅ Imagem "${nome}" selecionada!`, "success");
+    }, 300);
+  };
+
+  // Função para limpar seleção de imagens
+  function limparSelecaoImagens() {
+    document.querySelectorAll('.imagem-item.selected').forEach(item => {
+      item.classList.remove('selected');
+    });
+  }
+
+  // Função de busca com debounce
+  let timeoutBusca = null;
+  window.buscarImagens = function() {
+    clearTimeout(timeoutBusca);
+    timeoutBusca = setTimeout(() => {
+      termoBusca = document.getElementById("searchImagens").value.trim();
+      carregarImagens(true);
+    }, 500);
+  };
+
+  // Função para trocar bucket
+  window.trocarBucket = function() {
+    bucketAtual = document.getElementById("bucketSelect").value;
+    termoBusca = '';
+    document.getElementById("searchImagens").value = '';
+    carregarImagens(true);
+  };
+
+  // Funções de paginação
+  window.proximaPagina = function() {
+    paginaAtual++;
+    carregarImagens(false);
+  };
+
+  window.paginaAnterior = function() {
+    if (paginaAtual > 0) {
+      paginaAtual--;
+      carregarImagens(false);
+    }
+  };
+
+  // Função para atualizar controles de paginação
+  function atualizarPaginacao(totalCarregado) {
+    const paginacao = document.getElementById("paginacaoImagens");
+    const btnAnterior = document.getElementById("btnAnterior");
+    const btnProxima = document.getElementById("btnProxima");
+    const infoPagina = document.getElementById("infoPagina");
+    
+    paginacao.style.display = "block";
+    
+    btnAnterior.disabled = paginaAtual === 0;
+    btnProxima.disabled = totalCarregado < imagensPorPagina;
+    
+    infoPagina.textContent = `Página ${paginaAtual + 1}`;
+  }
+
+  // Função auxiliar para formatar tamanho do arquivo
+  function formatarTamanho(bytes) {
+    if (!bytes || bytes === 0) return 'N/A';
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  }
+
+  // Fechar modal ao clicar fora dele
+  window.addEventListener('click', function(event) {
+    const seletorModal = document.getElementById("seletorImagensModal");
+    if (event.target === seletorModal) {
+      fecharSeletorImagens();
+    }
+  });
+
+  // Carregar configurações ao inicializar a página
+  carregarConfiguracoes();
+
 });
+
+// Funções de Configuração
+function carregarConfiguracoes() {
+  // Carregar configurações do localStorage
+  const bucketName = localStorage.getItem('supabase_bucket_name') || 'imagens_melhoradas_tech';
+  const supabaseUrl = localStorage.getItem('supabase_url') || '';
+  
+  // Verificar se os elementos existem antes de definir valores
+  const bucketInput = document.getElementById('bucketName');
+  const urlInput = document.getElementById('supabaseUrl');
+  
+  if (bucketInput) bucketInput.value = bucketName;
+  if (urlInput) urlInput.value = supabaseUrl;
+  
+  // Atualizar a variável do bucket atual se existir
+  if (typeof bucketAtual !== 'undefined') {
+    bucketAtual = bucketName;
+  }
+}
+
+function salvarConfiguracoes() {
+  const bucketName = document.getElementById('bucketName').value.trim();
+  const supabaseUrl = document.getElementById('supabaseUrl').value.trim();
+  
+  if (!bucketName) {
+    mostrarStatusConfig('❌ Nome do bucket é obrigatório!', 'error');
+    return;
+  }
+  
+  // Salvar no localStorage
+  localStorage.setItem('supabase_bucket_name', bucketName);
+  localStorage.setItem('supabase_url', supabaseUrl);
+  
+  // Atualizar a variável do bucket atual
+  if (typeof bucketAtual !== 'undefined') {
+    bucketAtual = bucketName;
+  }
+  
+  // Salvar no servidor (opcional - pode implementar endpoint para salvar no .env)
+  mostrarStatusConfig('✅ Configurações salvas com sucesso!', 'success');
+}
+
+async function testarConexao() {
+  const bucketName = document.getElementById('bucketName').value.trim();
+  
+  if (!bucketName) {
+    mostrarStatusConfig('❌ Nome do bucket é obrigatório para testar a conexão!', 'error');
+    return;
+  }
+  
+  mostrarStatusConfig('🔄 Testando conexão...', 'info');
+  
+  try {
+    // Primeiro, tentar com Supabase JS Client
+    if (supabaseInitialized) {
+      console.log('🧪 Testando com Supabase JS Client...');
+      const imagensJS = await listImagesDirect(bucketName, '', 1, 0);
+      
+      if (imagensJS && imagensJS.length >= 0) {
+        mostrarStatusConfig(`✅ Conexão via Supabase JS bem-sucedida! ${imagensJS.length} imagem(ns) encontrada(s).`, 'success');
+        return;
+      }
+    }
+    
+    // Fallback para API tradicional
+    console.log('🧪 Testando com API tradicional...');
+    const response = await fetch('/storage/imagens?' + new URLSearchParams({
+      bucket: bucketName,
+      limit: 1
+    }));
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      mostrarStatusConfig('✅ Conexão via API bem-sucedida! Bucket encontrado.', 'success');
+    } else {
+      mostrarStatusConfig('❌ Erro na conexão: ' + data.error, 'error');
+    }
+    
+  } catch (error) {
+    mostrarStatusConfig('❌ Erro ao testar conexão: ' + error.message, 'error');
+  }
+}
+
+function mostrarStatusConfig(message, type) {
+  const statusDiv = document.getElementById('configStatus');
+  statusDiv.style.display = 'block';
+  statusDiv.textContent = message;
+  
+  // Definir cores baseadas no tipo
+  switch (type) {
+    case 'success':
+      statusDiv.style.backgroundColor = '#d4edda';
+      statusDiv.style.color = '#155724';
+      statusDiv.style.border = '1px solid #c3e6cb';
+      break;
+    case 'error':
+      statusDiv.style.backgroundColor = '#f8d7da';
+      statusDiv.style.color = '#721c24';
+      statusDiv.style.border = '1px solid #f5c6cb';
+      break;
+    case 'info':
+      statusDiv.style.backgroundColor = '#d1ecf1';
+      statusDiv.style.color = '#0c5460';
+      statusDiv.style.border = '1px solid #bee5eb';
+      break;
+  }
+  
+  // Auto-ocultar após 5 segundos para mensagens de sucesso
+  if (type === 'success') {
+    setTimeout(() => {
+      statusDiv.style.display = 'none';
+    }, 5000);
+  }
+}

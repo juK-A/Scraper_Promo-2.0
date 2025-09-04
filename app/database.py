@@ -83,3 +83,69 @@ def obter_produto_db(produto_id):
 def atualizar_produto_db(produto_id, dados_atualizacao):
     """Atualiza dados específicos de um produto no Supabase."""
     return supabase.table("promocoes").update(dados_atualizacao).eq("id", produto_id).execute()
+
+# ===== FUNÇÕES PARA SUPABASE STORAGE =====
+
+def listar_imagens_bucket(bucket_name="imagens", pasta="", limit=50, offset=0, search_term=""):
+    """Lista imagens do bucket do Supabase Storage com paginação e busca."""
+    try:
+        # Listar arquivos do bucket
+        response = supabase.storage.from_(bucket_name).list(path=pasta, limit=limit, offset=offset)
+        
+        if not response:
+            return []
+        
+        imagens = []
+        for arquivo in response:
+            # Filtrar apenas arquivos de imagem
+            nome = arquivo.get('name', '')
+            if any(nome.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']):
+                # Se há termo de busca, filtrar pelo nome
+                if not search_term or search_term.lower() in nome.lower():
+                    # Gerar URL pública da imagem
+                    url_publica = supabase.storage.from_(bucket_name).get_public_url(f"{pasta}/{nome}" if pasta else nome)
+                    
+                    imagens.append({
+                        'nome': nome,
+                        'url': url_publica,
+                        'tamanho': arquivo.get('metadata', {}).get('size', 0),
+                        'modificado_em': arquivo.get('updated_at', ''),
+                        'path_completo': f"{pasta}/{nome}" if pasta else nome
+                    })
+        
+        # Ordenar por data de modificação (mais recentes primeiro)
+        imagens.sort(key=lambda x: x.get('modificado_em', ''), reverse=True)
+        return imagens
+        
+    except Exception as e:
+        print(f"Erro ao listar imagens do bucket: {e}")
+        return []
+
+def obter_url_publica_imagem(bucket_name="imagens", caminho_arquivo=""):
+    """Obtém a URL pública de uma imagem no Supabase Storage."""
+    try:
+        return supabase.storage.from_(bucket_name).get_public_url(caminho_arquivo)
+    except Exception as e:
+        print(f"Erro ao obter URL pública: {e}")
+        return None
+
+def listar_pastas_bucket(bucket_name="imagens", pasta_pai=""):
+    """Lista pastas (diretórios) no bucket do Supabase Storage."""
+    try:
+        response = supabase.storage.from_(bucket_name).list(path=pasta_pai)
+        
+        pastas = []
+        for item in response:
+            # Identificar pastas (não têm extensão de arquivo)
+            nome = item.get('name', '')
+            if not any(nome.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.txt', '.json']):
+                pastas.append({
+                    'nome': nome,
+                    'path_completo': f"{pasta_pai}/{nome}" if pasta_pai else nome
+                })
+        
+        return pastas
+        
+    except Exception as e:
+        print(f"Erro ao listar pastas do bucket: {e}")
+        return []
