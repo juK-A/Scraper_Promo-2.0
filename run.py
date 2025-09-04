@@ -15,7 +15,7 @@ except Exception as e:
 
 if __name__ == '__main__':
     debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
-    port = int(os.getenv('PORT', 5000))
+    port = int(os.getenv('PORT', 80))
     
     print(f"Starting server on 0.0.0.0:{port}, debug={debug_mode}", file=sys.stderr)
     
