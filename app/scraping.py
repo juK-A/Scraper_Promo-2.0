@@ -9,7 +9,21 @@ import re
 
 load_dotenv()
 USER_AGENT = os.getenv("USER_AGENT")
+PROXY_HOST = os.getenv("PROXY_HOST")
+PROXY_PORT = os.getenv("PROXY_PORT")
+PROXY_USERNAME = os.getenv("PROXY_USERNAME")
+PROXY_PASSWORD = os.getenv("PROXY_PASSWORD")
+
 headers = {'User-Agent': USER_AGENT}
+
+# Configure proxy if available
+proxies = {}
+if PROXY_HOST and PROXY_PORT and PROXY_USERNAME and PROXY_PASSWORD:
+    proxy_url = f"http://{PROXY_USERNAME}:{PROXY_PASSWORD}@{PROXY_HOST}:{PROXY_PORT}"
+    proxies = {
+        'http': proxy_url,
+        'https': proxy_url
+    }
 
 def extrair_imagem_produto(produto_elem):
     imagem_url = ""
@@ -90,7 +104,7 @@ def scrape_mercadolivre(produto, max_pages=3):
         try:
             offset = page * 50
             url_final = f'https://lista.mercadolivre.com.br/{produto_formatado}_Desde_{offset + 1}'
-            r = requests.get(url_final, headers=headers, timeout=15)
+            r = requests.get(url_final, headers=headers, proxies=proxies, timeout=15)
             if r.status_code != 200:
                 break
             site = BeautifulSoup(r.content, 'html.parser')
@@ -153,7 +167,7 @@ def scrape_mercadolivre(produto, max_pages=3):
 
 def scrape_produto_especifico(url):
     try:
-        r = requests.get(url, headers=headers, timeout=15)
+        r = requests.get(url, headers=headers, proxies=proxies, timeout=15)
         if r.status_code != 200:
             return None
         site = BeautifulSoup(r.content, 'html.parser')
@@ -334,7 +348,7 @@ def busca_alternativa(produto):
     try:
         produto_formatado = produto.replace(' ', '%20')
         url = f'https://lista.mercadolivre.com.br/{produto_formatado}'
-        r = requests.get(url, headers=headers, timeout=15)
+        r = requests.get(url, headers=headers, proxies=proxies, timeout=15)
         if r.status_code == 200:
             site = BeautifulSoup(r.content, 'html.parser')
             links = site.find_all('a', href=True)
